@@ -1,0 +1,11 @@
+# .gitignore --- Git untracked files -*- mode: gitignore; -*-
+
+# direnv
+/.direnv
+
+# nix
+/repl-result-out
+/result
+/result-*
+
+# .gitignore ends here

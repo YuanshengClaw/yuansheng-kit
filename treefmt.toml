@@ -1,0 +1,31 @@
+# treefmt.toml --- Formatter multiplexer for Yuansheng Kit
+
+[formatter.biome]
+command = "biome"
+includes = [
+    "*.js",
+    "*.ts",
+    "*.mjs",
+    "*.mts",
+    "*.cjs",
+    "*.cts",
+    "*.jsx",
+    "*.tsx",
+    "*.d.ts",
+    "*.d.cts",
+    "*.d.mts",
+    "*.json",
+    "*.jsonc",
+    "*.css",
+]
+options = ["check", "--write", "--no-errors-on-unmatched", "--config-path", "biome.json"]
+
+[formatter.markdown]
+command = "mdformat"
+includes = ["*.md"]
+options = ["--extensions=footnote", "--extensions=frontmatter", "--extensions=gfm", "--extensions=gfm_alerts", "--extensions=tables", "--number", "--wrap=80"]
+
+[formatter.nix]
+command = "nixfmt"
+includes = ["*.nix"]
+options = ["--width=50"]

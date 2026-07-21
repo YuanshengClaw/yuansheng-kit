@@ -1,0 +1,26 @@
+# devshell.toml --- devShell for Yuansheng Kit
+
+[devshell]
+name = "yuansheng-kit"
+
+[[commands]]
+package = "biome"
+category = "formatters"
+
+[[commands]]
+package = "mdformat"
+category = "formatters"
+
+[[commands]]
+package = "nixfmt"
+category = "formatters"
+
+[[commands]]
+package = "llm-agents.opencode"
+category = "agents"
+
+[[commands]]
+package = "treefmt"
+category = "formatters"
+
+# devshell.toml ends here
