@@ -18,13 +18,30 @@ package = false
 python_version = "3.14"
 strict = true
 files = [
+  "src",
   "tests",
 ]
+
+[[tool.mypy.overrides]]
+module = [
+  "pytest",
+  "rfc8785",
+]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = [
+  "test_validator",
+]
+disallow_untyped_decorators = false
 
 [tool.pytest.ini_options]
 addopts = [
   "--strict-config",
   "--strict-markers",
+]
+pythonpath = [
+  "src",
 ]
 testpaths = [
   "tests",

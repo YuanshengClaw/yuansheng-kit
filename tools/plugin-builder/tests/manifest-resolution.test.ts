@@ -75,6 +75,7 @@ describe("plugin manifest resolution", () => {
     expect(selected.platform.artifact_name).toBe("@yuansheng-kit/opencode-ys-trace");
     for (const required of [
       "opencode-platform-handler",
+      "perf-data-validator",
       "sg2044-hardware-profile",
       "trace-agent",
       "trace-command",
@@ -84,7 +85,7 @@ describe("plugin manifest resolution", () => {
       expect(selectedIds.has(required)).toBeTrue();
     }
 
-    expect(selectedPaths.some((path) => path.includes("tools/perf-data-validator"))).toBeFalse();
+    expect(selectedPaths.some((path) => path.includes("tools/perf-data-validator"))).toBeTrue();
     expect(selectedPaths.some((path) => path.endsWith("/SOURCE.json"))).toBeFalse();
     expect(selectedPaths.some((path) => /pattern/iu.test(path))).toBeFalse();
   });

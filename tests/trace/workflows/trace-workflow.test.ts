@@ -31,6 +31,10 @@ const REPORT_URL = new URL(
   "../../fixtures/trace/interaction/perf-data-validation-report-v1.json",
   import.meta.url,
 );
+const PYTHON_VALIDATOR_GOLDEN_URL = new URL(
+  "../../../plugins/trace/tools/perf-data-validator/tests/golden/openblas-dgemv-report-v1.json",
+  import.meta.url,
+);
 const PROFILE_URL = new URL(
   "../../../plugins/trace/resources/hardware-profiles/sg2044.json",
   import.meta.url,
@@ -166,6 +170,15 @@ describe("trace workflow report and profile ports", () => {
     expect(Object.isFrozen(parsed.report.testcases[0])).toBeTrue();
     expect(parsed.bytes).toEqual(canonicalizeJson(parsed.report).bytes);
     expect(parsePerfDataValidationReportV1(payload).sha256).toBe(parsed.sha256);
+
+    const storedPythonGolden = await readBytes(PYTHON_VALIDATOR_GOLDEN_URL);
+    expect(storedPythonGolden.at(-1)).toBe(0x0a);
+    const pythonGolden = storedPythonGolden.slice(0, -1);
+    const parsedPythonGolden = parsePerfDataValidationReportV1(pythonGolden);
+    expect(parsedPythonGolden.bytes).toEqual(pythonGolden);
+    expect(parsedPythonGolden.report.testcases).toMatchObject([
+      { name: "dgemv_2048x2048", status: "valid" },
+    ]);
 
     const unsupported = canonicalizeJson({ ...parsed.report, contract_version: 2 }).bytes;
     expectReportError(

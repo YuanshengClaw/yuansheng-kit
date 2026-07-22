@@ -18,8 +18,16 @@ const EXPECTED_PLUGIN_ID = "trace";
 const EXPECTED_PLATFORM_ID = "opencode";
 const EXPECTED_ARTIFACT_NAME = "@yuansheng-kit/opencode-ys-trace";
 const ARGUMENT_PLACEHOLDER = "$ARGUMENTS";
+const EXPECTED_BASH_PERMISSION_PATTERNS = Object.freeze([
+  "*",
+  "env -u PYTHONHOME -u PYTHONPATH */bin/python* -P -B -s -m pip --isolated install --require-hashes --only-binary=:all: --no-deps --index-url * -r *requirements.txt*",
+  "env -u PYTHONHOME -u PYTHONPATH python3.14 -P -B -s -m venv --clear *",
+  "env -u PYTHONHOME PYTHONPATH=* */bin/python* -P -B -s -m perf_data_validator validate *",
+  "env -u PYTHONHOME PYTHONPATH=* python3.14 -P -B -s -m perf_data_validator probe *",
+]);
 
 type PermissionAction = "allow" | "ask" | "deny";
+type PermissionRule = PermissionAction | Readonly<Record<string, PermissionAction>>;
 
 interface AgentConfiguration {
   readonly description: string;
@@ -54,7 +62,8 @@ interface RuntimeConfiguration {
   readonly entrypointResource: string;
   readonly external: readonly string[];
   readonly packageResource: string;
-  readonly tool: string;
+  readonly reportTool: string;
+  readonly startTool: string;
 }
 
 interface OpenCodeConfiguration {
@@ -62,7 +71,7 @@ interface OpenCodeConfiguration {
   readonly artifactRoot: ArtifactRootConfiguration;
   readonly command: CommandConfiguration;
   readonly copies: readonly CopyConfiguration[];
-  readonly permissions: Readonly<Record<string, PermissionAction>>;
+  readonly permissions: Readonly<Record<string, PermissionRule>>;
   readonly runtime: RuntimeConfiguration;
 }
 
@@ -216,21 +225,46 @@ function parseCopies(value: unknown): readonly CopyConfiguration[] {
   return copies;
 }
 
-function parsePermissions(value: unknown): Readonly<Record<string, PermissionAction>> {
+function parsePermissionAction(value: unknown, label: string): PermissionAction {
+  if (value !== "allow" && value !== "ask" && value !== "deny") {
+    fail(`${label} has an invalid action`);
+  }
+  return value;
+}
+
+function parsePermissionPatterns(
+  value: Readonly<Record<string, unknown>>,
+  label: string,
+): Readonly<Record<string, PermissionAction>> {
+  const entries = Object.entries(value);
+  if (entries.length === 0) {
+    fail(`${label} must not be empty`);
+  }
+  const parsed: Record<string, PermissionAction> = {};
+  for (const [pattern, action] of entries) {
+    requireString(pattern, `${label} pattern`);
+    if (hasAsciiControl(pattern)) {
+      fail(`${label} pattern must not contain ASCII control characters`);
+    }
+    parsed[pattern] = parsePermissionAction(action, `${label}[${JSON.stringify(pattern)}]`);
+  }
+  return Object.freeze(parsed);
+}
+
+function parsePermissions(value: unknown): Readonly<Record<string, PermissionRule>> {
   const permissions = requireRecord(value, "permissions");
   if (Object.keys(permissions).length === 0) {
     fail("permissions must not be empty");
   }
-  const parsed: Record<string, PermissionAction> = {};
+  const parsed: Record<string, PermissionRule> = {};
   for (const name of Object.keys(permissions).sort()) {
     if (!SAFE_PERMISSION_NAME.test(name)) {
       fail(`permission name ${JSON.stringify(name)} is invalid`);
     }
-    const action = permissions[name];
-    if (action !== "allow" && action !== "ask" && action !== "deny") {
-      fail(`permission ${JSON.stringify(name)} has an invalid action`);
-    }
-    parsed[name] = action;
+    const rule = permissions[name];
+    parsed[name] = isRecord(rule)
+      ? parsePermissionPatterns(rule, `permission ${JSON.stringify(name)}`)
+      : parsePermissionAction(rule, `permission ${JSON.stringify(name)}`);
   }
   return Object.freeze(parsed);
 }
@@ -264,16 +298,28 @@ function parseRuntime(value: unknown): RuntimeConfiguration {
   const runtime = requireRecord(value, "runtime");
   requireExactKeys(
     runtime,
-    ["bundle_sha256", "destination", "entrypoint_resource", "external", "package_resource", "tool"],
+    [
+      "bundle_sha256",
+      "destination",
+      "entrypoint_resource",
+      "external",
+      "package_resource",
+      "report_tool",
+      "start_tool",
+    ],
     "runtime",
   );
   const bundleSha256 = requireString(runtime.bundle_sha256, "runtime.bundle_sha256");
   if (!/^[0-9a-f]{64}$/u.test(bundleSha256)) {
     fail("runtime.bundle_sha256 must be a lowercase SHA-256 digest");
   }
-  const tool = requireString(runtime.tool, "runtime.tool");
-  if (!SAFE_PERMISSION_NAME.test(tool)) {
-    fail("runtime.tool must be a normalized OpenCode tool identifier");
+  const reportTool = requireString(runtime.report_tool, "runtime.report_tool");
+  const startTool = requireString(runtime.start_tool, "runtime.start_tool");
+  if (!SAFE_PERMISSION_NAME.test(reportTool) || !SAFE_PERMISSION_NAME.test(startTool)) {
+    fail("runtime tools must be normalized OpenCode tool identifiers");
+  }
+  if (reportTool === startTool) {
+    fail("runtime tools must be distinct");
   }
   return {
     bundleSha256,
@@ -284,7 +330,8 @@ function parseRuntime(value: unknown): RuntimeConfiguration {
     ),
     external: requireUniqueStringArray(runtime.external, "runtime.external", SAFE_NODE_BUILTIN),
     packageResource: requireIdentifier(runtime.package_resource, "runtime.package_resource"),
-    tool,
+    reportTool,
+    startTool,
   };
 }
 
@@ -327,10 +374,54 @@ function parseConfiguration(value: unknown): OpenCodeConfiguration {
   }
   const artifactRoot = parseArtifactRoot(configuration.artifact_root);
   const copies = parseCopies(configuration.copies);
+  requireExactKeys(
+    requireRecord(configuration.permissions, "permissions"),
+    [
+      "bash",
+      "edit",
+      "external_directory",
+      "read",
+      "skill",
+      "webfetch",
+      "websearch",
+      "write",
+      "ys_trace_provide_validation_report",
+      "ys_trace_start",
+    ],
+    "permissions",
+  );
   const permissions = parsePermissions(configuration.permissions);
   const runtime = parseRuntime(configuration.runtime);
-  if (permissions[runtime.tool] !== "allow") {
-    fail("runtime.tool permission must be allow");
+  if (permissions[runtime.startTool] !== "allow" || permissions[runtime.reportTool] !== "allow") {
+    fail("runtime tool permissions must be allow");
+  }
+  if (
+    permissions.edit !== "deny" ||
+    permissions.external_directory !== "ask" ||
+    permissions.read !== "deny" ||
+    permissions.skill !== "allow" ||
+    permissions.webfetch !== "deny" ||
+    permissions.websearch !== "deny" ||
+    permissions.write !== "deny"
+  ) {
+    fail("non-Bash permissions do not match the read-only runtime policy");
+  }
+  const bash = permissions.bash;
+  if (!isRecord(bash)) {
+    fail("bash permission must use granular patterns");
+  }
+  const bashEntries = Object.entries(bash);
+  if (
+    bashEntries.some(([pattern], index) => pattern !== EXPECTED_BASH_PERMISSION_PATTERNS[index]) ||
+    bashEntries.length !== EXPECTED_BASH_PERMISSION_PATTERNS.length
+  ) {
+    fail("bash permission patterns do not match the fixed validator commands");
+  }
+  if (bashEntries[0]?.[1] !== "deny") {
+    fail("bash permission must place the deny catch-all first");
+  }
+  if (bashEntries.length !== 5 || bashEntries.slice(1).some(([, action]) => action !== "ask")) {
+    fail("bash permission must contain exactly four prompted command categories");
   }
   for (const destination of [
     agent.destination,
@@ -378,7 +469,15 @@ function quoteYaml(value: string): string {
 
 function generateAgent(configuration: OpenCodeConfiguration, body: string): Uint8Array {
   const permissions = Object.entries(configuration.permissions)
-    .map(([name, action]) => `  ${name}: ${action}`)
+    .flatMap(([name, rule]) => {
+      if (typeof rule === "string") {
+        return [`  ${name}: ${rule}`];
+      }
+      return [
+        `  ${name}:`,
+        ...Object.entries(rule).map(([pattern, action]) => `    ${quoteYaml(pattern)}: ${action}`),
+      ];
+    })
     .join("\n");
   return UTF8_ENCODER.encode(
     [
@@ -404,7 +503,7 @@ function generateCommand(configuration: OpenCodeConfiguration, body: string): Ui
       "",
       `User input: ${configuration.command.argumentPlaceholder}`,
       "",
-      `After collecting both required inputs, call ${configuration.runtime.tool} with those exact values and the optional artifact_root override. Present the returned absolute artifact_root before any later effect.`,
+      `After collecting both required inputs, call ${configuration.runtime.startTool} with those exact values and the optional artifact_root override. Present the returned absolute artifact_root before any later effect.`,
       "",
       body,
     ].join("\n"),

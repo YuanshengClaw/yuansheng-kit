@@ -59,6 +59,14 @@
 
   "overrides": [
     {
+      "includes": [
+        "plugins/trace/tools/perf-data-validator/tests/golden/openblas-dgemv-report-v1.json"
+      ],
+      "formatter": {
+        "enabled": false
+      }
+    },
+    {
       "includes": ["tools/yuansheng-root-cause-blueprint/src/generated/validators.ts"],
       "linter": {
         "enabled": false

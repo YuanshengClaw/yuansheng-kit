@@ -66,7 +66,7 @@
       "source": {
         "kind": "file",
         "path": "plugins/trace/opencode/src/index.ts",
-        "sha256": "cbd96664277ec5a91628b4622365660b44f58303c4c7423d61a8b9c5b0a4fb86"
+        "sha256": "c529a15de71100bcbb92eead1a1621587de15df98ca2ed249f4dab3a6b10ed88"
       },
       "requires": ["hardware-profile", "trace-workflow"]
     },
@@ -77,16 +77,28 @@
       "source": {
         "kind": "file",
         "path": "plugins/trace/opencode/src/platform-handler.ts",
-        "sha256": "d3cc3cf30b8362c1393645355b1b8c17cc3db97d2d728d3984c58c3ed9ab9d51"
+        "sha256": "1503faecd1dbb91e0dfb3ddb2ecfd44ebfaccb652956df8142046c5f6eef7ba9"
       },
       "requires": [
         "opencode-package",
         "opencode-runtime-entry",
+        "perf-data-validator",
         "sg2044-hardware-profile",
         "trace-agent",
         "trace-command",
         "write-root-cause-blueprint-skill"
       ]
+    },
+    {
+      "id": "perf-data-validator",
+      "kind": "tool",
+      "logical_path": "tools/perf-data-validator",
+      "source": {
+        "kind": "tree",
+        "path": "plugins/trace/tools/perf-data-validator",
+        "sha256": "5af0b51494b3d35a33ec096fe6ec335ed2d3b02f3e1a2e1ef09d83c5592ae8d7"
+      },
+      "requires": []
     },
     {
       "id": "perf-data-validation-report",
@@ -187,7 +199,7 @@
       "source": {
         "kind": "file",
         "path": "plugins/trace/agents/trace.md",
-        "sha256": "e763e59e87dc3c2b235b7a8d477fc24d2dba61c5e951603c18e6c528e9212ca5"
+        "sha256": "ba40e6954ff5b5736a1596ed1c5e26aa9579e39455fc70b8456adb3b278ba44b"
       },
       "requires": ["write-root-cause-blueprint-skill"]
     },
@@ -257,27 +269,40 @@
             "destination": ".opencode/skills/write-root-cause-blueprint"
           },
           {
+            "resource": "perf-data-validator",
+            "destination": ".opencode/yuansheng/tools/perf-data-validator"
+          },
+          {
             "resource": "sg2044-hardware-profile",
             "destination": ".opencode/yuansheng/resources/hardware-profiles/sg2044.json"
           }
         ],
         "permissions": {
-          "bash": "deny",
+          "bash": {
+            "*": "deny",
+            "env -u PYTHONHOME -u PYTHONPATH */bin/python* -P -B -s -m pip --isolated install --require-hashes --only-binary=:all: --no-deps --index-url * -r *requirements.txt*": "ask",
+            "env -u PYTHONHOME -u PYTHONPATH python3.14 -P -B -s -m venv --clear *": "ask",
+            "env -u PYTHONHOME PYTHONPATH=* */bin/python* -P -B -s -m perf_data_validator validate *": "ask",
+            "env -u PYTHONHOME PYTHONPATH=* python3.14 -P -B -s -m perf_data_validator probe *": "ask"
+          },
           "edit": "deny",
+          "external_directory": "ask",
           "read": "deny",
           "skill": "allow",
           "webfetch": "deny",
           "websearch": "deny",
           "write": "deny",
+          "ys_trace_provide_validation_report": "allow",
           "ys_trace_start": "allow"
         },
         "runtime": {
-          "bundle_sha256": "124023496b79f29c39662e5d48d168498b8ddf2c957e68c4db40a7087c728e40",
+          "bundle_sha256": "72f6f08028a82c6689cb5151a7b2f9aeddb000b6ed47c09fb87c2e749f7fc0df",
           "destination": ".opencode/plugins/ys-trace.js",
           "entrypoint_resource": "opencode-runtime-entry",
-          "external": ["node:crypto", "node:fs/promises", "node:path"],
+          "external": ["node:crypto", "node:fs", "node:fs/promises", "node:path", "node:url"],
           "package_resource": "opencode-package",
-          "tool": "ys_trace_start"
+          "report_tool": "ys_trace_provide_validation_report",
+          "start_tool": "ys_trace_start"
         },
         "artifact_root": {
           "default_relative_path": ".opencode/yuansheng/blueprint",

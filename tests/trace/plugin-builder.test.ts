@@ -20,7 +20,6 @@ const FORBIDDEN_ARTIFACT_PATHS = [
   /(?:^|\/)dist(?:\/|$)/iu,
   /(?:^|\/)execution-summary(?:[./-]|$)/iu,
   /(?:^|\/)install-global\.sh$/iu,
-  /(?:^|\/)perf-data-validator(?:\/|$)/iu,
   /(?:^|\/)node_modules(?:\/|$)/iu,
   /(?:^|\/)package\.json$/iu,
   /(?:^|\/)(?:bun\.lockb?|package-lock\.json|pnpm-lock\.yaml|yarn\.lock)$/iu,
@@ -261,6 +260,13 @@ describe("Yuansheng Trace plugin build", () => {
     expectIdenticalArtifacts(firstFiles, secondFiles);
     expect(firstFiles.filter((file) => file.path === ".opencode/plugins/ys-trace.js")).toHaveLength(
       1,
+    );
+    expect(firstFiles.map((file) => file.path)).toEqual(
+      expect.arrayContaining([
+        ".opencode/yuansheng/tools/perf-data-validator/README.md",
+        ".opencode/yuansheng/tools/perf-data-validator/requirements.txt",
+        ".opencode/yuansheng/tools/perf-data-validator/src/perf_data_validator/__main__.py",
+      ]),
     );
 
     expect(secondReceipt).toEqual({ ...firstReceipt, output: secondOutput });
