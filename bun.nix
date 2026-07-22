@@ -77,8 +77,8 @@
     url = "https://registry.npmjs.org/@types/node/-/node-26.1.1.tgz";
     hash = "sha512-nxAkRSVkN1Y0JC1W8ky/fTfkGsMmcrRsbx+3XoZE+rMOX71kLYTV7fLXpqud1GpbpP5TuffXFqfX7fH2GgZREw==";
   };
+  "@yuansheng-kit/opencode-ys-trace" = copyPathToStore ./plugins/trace/opencode;
   "@yuansheng-kit/plugin-builder" = copyPathToStore ./tools/plugin-builder;
-  "@yuansheng-kit/trace-opencode" = copyPathToStore ./plugins/trace/opencode;
   "@yuansheng-kit/trace-tools" = copyPathToStore ./plugins/trace/tools;
   "ajv-formats@3.0.1" = fetchurl {
     url = "https://registry.npmjs.org/ajv-formats/-/ajv-formats-3.0.1.tgz";
