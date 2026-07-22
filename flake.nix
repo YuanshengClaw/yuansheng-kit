@@ -266,7 +266,17 @@
                       cd source
                       export HOME="$TMPDIR/home"
                       mkdir -p "$HOME"
+                      if find . -type l -print -quit | grep -q .
+                      then
+                        echo "repository source contains a symbolic link" >&2
+                        exit 1
+                      fi
                       git init --quiet
+                      printf '/biome-local-excluded.json\n' > .git/info/exclude
+                      printf '{ invalid local fixture\n' > biome-local-excluded.json
+                      git add --all
+                      biome check --write .
+                      git diff --exit-code -- .
                       biome ci .
                       touch "$out"
                     '';
@@ -300,14 +310,51 @@
 
                   buildPhase = ''
                     runHook preBuild
+                    mkdir -p "$TMPDIR/ys-bun-checks/opencode-capabilities"
+                    export OPENCODE_CAPABILITY_EVIDENCE_DIR="$TMPDIR/ys-bun-checks/opencode-capabilities"
                     tsc --noEmit
-                    bun test
+                    bun test \
+                      --reporter=junit \
+                      --reporter-outfile="$TMPDIR/ys-bun-checks/junit.xml"
                     runHook postBuild
                   '';
 
                   installPhase = ''
                     runHook preInstall
-                    touch "$out"
+                    evidenceRoot="$out/share/yuansheng-kit/checks/ys-bun"
+                    test -s "$TMPDIR/ys-bun-checks/junit.xml"
+                    test -s "$TMPDIR/ys-bun-checks/opencode-capabilities/runtime/version.json"
+                    test -s "$TMPDIR/ys-bun-checks/opencode-capabilities/runtime/http-command.json"
+                    test -s "$TMPDIR/ys-bun-checks/opencode-capabilities/runtime/plugin-tool-ask.json"
+                    test -s "$TMPDIR/ys-bun-checks/opencode-capabilities/sdk-external/sdk-external.json"
+                    mkdir -p "$evidenceRoot"
+                    sed -E \
+                      -e 's/ time="[^"]*"//g' \
+                      -e 's/ hostname="[^"]*"//g' \
+                      "$TMPDIR/ys-bun-checks/junit.xml" \
+                      > "$evidenceRoot/junit.xml"
+                    if grep -E ' (time|hostname)="' "$evidenceRoot/junit.xml"
+                    then
+                      echo "JUnit evidence contains non-deterministic attributes" >&2
+                      exit 1
+                    fi
+                    cp -R \
+                      "$TMPDIR/ys-bun-checks/opencode-capabilities" \
+                      "$evidenceRoot/opencode-capabilities"
+                    if grep -R -E \
+                      'yuansheng-opencode-capabilities-|"durationMs"|sessionID[^[:alnum:]_]*ses_|timestamp[^[:alnum:]_]*[0-9]{4}-|run=[0-9A-Za-z]' \
+                      "$evidenceRoot/opencode-capabilities"
+                    then
+                      echo "capability evidence contains non-deterministic runtime data" >&2
+                      exit 1
+                    fi
+                    (
+                      cd "$evidenceRoot"
+                      find . -type f ! -name SHA256SUMS -print0 \
+                        | sort -z \
+                        | xargs -0 sha256sum \
+                        > SHA256SUMS
+                    )
                     runHook postInstall
                   '';
                 };
@@ -420,6 +467,7 @@
 
                 inherit (pkgs)
                   biome
+                  git
                   mdformat
                   nixfmt
                   treefmt
@@ -431,6 +479,7 @@
                 export PATH=${
                   makeBinPath [
                     biome
+                    git
                     mdformat
                     nixfmt
                   ]
@@ -438,6 +487,7 @@
                 exec ${treefmt}/bin/treefmt \
                   --config-file=${projectRoot + /treefmt.toml} \
                   --tree-root-file=flake.nix \
+                  --walk=git \
                   "$@"
               '';
 

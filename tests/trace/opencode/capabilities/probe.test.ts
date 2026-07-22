@@ -1,4 +1,6 @@
 import { expect, test } from "bun:test";
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
 import {
   CapabilitySentinels,
   type CommandResult,
@@ -17,6 +19,13 @@ function requireSuccess(label: string, result: CommandResult): void {
   );
 }
 
+function requireRecord(label: string, value: unknown): Readonly<Record<string, unknown>> {
+  if (typeof value === "object" && value !== null && !Array.isArray(value)) {
+    return value as Record<string, unknown>;
+  }
+  throw new Error(`${label} did not return a JSON object`);
+}
+
 test("OpenCode discovers and executes isolated capability fixtures", async () => {
   const probe = await createProbeEnvironment();
   try {
@@ -32,6 +41,54 @@ test("OpenCode discovers and executes isolated capability fixtures", async () =>
     const userHome = process.env.HOME;
     if (userHome !== undefined && !probe.root.startsWith(userHome)) {
       expect(paths.stdout).not.toContain(userHome);
+    }
+
+    const server = await probe.startServer();
+    try {
+      const command = findRecord(
+        await server.request("/command"),
+        (record) => record.name === "capability-command",
+      );
+      expect(command).toBeDefined();
+      expect(command?.agent).toBe("capability");
+      expect(command?.template).toContain(CapabilitySentinels.command);
+
+      const httpAgent = findRecord(
+        await server.request("/agent"),
+        (record) => record.name === "capability",
+      );
+      expect(httpAgent).toBeDefined();
+      expect(httpAgent?.prompt).toContain(CapabilitySentinels.agent);
+
+      const httpSkill = findRecord(
+        await server.request("/skill"),
+        (record) => record.name === "capability-skill",
+      );
+      expect(httpSkill).toBeDefined();
+      expect(httpSkill?.content).toContain(CapabilitySentinels.skill);
+
+      const toolIds = await server.request("/experimental/tool/ids");
+      expect(Array.isArray(toolIds)).toBeTrue();
+      if (!Array.isArray(toolIds)) {
+        throw new Error("OpenCode tool IDs endpoint did not return an array");
+      }
+      expect(toolIds).toContain("capability_echo");
+
+      const providers = requireRecord(
+        "OpenCode providers endpoint",
+        await server.request("/config/providers"),
+      );
+      const capabilityProvider = findRecord(
+        providers.providers,
+        (record) => record.id === "capability",
+      );
+      expect(capabilityProvider).toMatchObject({
+        id: "capability",
+        name: "Local Capability Provider",
+      });
+      expect(providers.default).toEqual({ capability: "probe" });
+    } finally {
+      await server.stop();
     }
 
     const agent = await probe.run("agent", ["debug", "agent", "capability"]);
@@ -91,6 +148,32 @@ test("OpenCode discovers and executes isolated capability fixtures", async () =>
     expect(deniedTool.stderr.toLowerCase()).toContain("disabled");
     expect(deniedTool.stdout).not.toContain(CapabilitySentinels.toolResult);
 
+    const requestsBeforeAsk = probe.provider.requests.length;
+    const askedTool = await probe.run(
+      "plugin-tool-ask",
+      [
+        "run",
+        "--model",
+        "capability/probe",
+        "--agent",
+        "capability-ask",
+        "--format",
+        "json",
+        CapabilitySentinels.askProviderRequest,
+      ],
+      15_000,
+    );
+    requireSuccess("plugin tool ask probe", askedTool);
+    expect(askedTool.stderr).toContain("permission requested: capability_echo (*); auto-rejecting");
+    expect(askedTool.stdout).toContain("tool_use");
+    expect(askedTool.stdout).toContain("The user rejected permission");
+    expect(askedTool.stdout).toContain(CapabilitySentinels.askInput);
+    expect(askedTool.stdout).not.toContain(CapabilitySentinels.toolResult);
+    const askAgentRequests = probe.provider.requests
+      .slice(requestsBeforeAsk)
+      .filter((request) => JSON.stringify(request.body).includes(CapabilitySentinels.askAgent));
+    expect(askAgentRequests).toHaveLength(1);
+
     const command = await probe.run("command-provider", [
       "run",
       "--model",
@@ -118,3 +201,38 @@ test("OpenCode discovers and executes isolated capability fixtures", async () =>
     await probe.cleanup();
   }
 }, 120_000);
+
+test("OpenCode cannot load a plugin that leaves its SDK external", async () => {
+  const probe = await createProbeEnvironment({
+    evidenceName: "sdk-external",
+    pluginPackaging: "external",
+  });
+  try {
+    const initialInventory = await probe.inventory();
+    const generatedPlugin = await readFile(
+      join(probe.opencodeDirectory, "plugins", "capability.js"),
+      "utf8",
+    );
+    expect(generatedPlugin).toMatch(/from\s*["']@opencode-ai\/plugin(?:\/[^"']*)?["']/u);
+
+    const result = await probe.run("sdk-external", [
+      "--print-logs",
+      "--log-level",
+      "DEBUG",
+      "debug",
+      "agent",
+      "capability",
+      "--tool",
+      "capability_echo",
+      "--params",
+      '{"value":"EXTERNAL_INPUT"}',
+    ]);
+    expect(result.timedOut).toBeFalse();
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr).toContain("Tool capability_echo not found for agent capability");
+    expect(result.stdout).not.toContain(CapabilitySentinels.toolResult);
+    expect(await probe.inventory()).toEqual(initialInventory);
+  } finally {
+    await probe.cleanup();
+  }
+}, 60_000);

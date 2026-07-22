@@ -10,6 +10,12 @@ export const CapabilityPlugin: Plugin = async () => ({
         value: tool.schema.string(),
       },
       async execute({ value }, context) {
+        await context.ask({
+          always: ["*"],
+          metadata: { value },
+          patterns: ["*"],
+          permission: "capability_echo",
+        });
         return JSON.stringify({
           agent: context.agent,
           directory: context.directory,
