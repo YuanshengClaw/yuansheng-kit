@@ -2,28 +2,57 @@
 
 [devshell]
 name = "yuansheng-kit"
-packages = [
-  "prek"
-]
 
 [[commands]]
 package = "biome"
 category = "formatters"
 
 [[commands]]
-package = "mdformat"
-category = "formatters"
+package = "bun"
+category = "development"
 
 [[commands]]
-package = "nixfmt"
-category = "formatters"
+package = "bun2nix"
+category = "development"
 
 [[commands]]
 package = "llm-agents.opencode"
 category = "agents"
 
 [[commands]]
+package = "mdformat"
+category = "formatters"
+
+[[commands]]
+package = "mypy"
+category = "development"
+
+[[commands]]
+package = "nixfmt"
+category = "formatters"
+
+[[commands]]
+package = "prek"
+category = "tools"
+
+[[commands]]
+package = "python314"
+category = "development"
+
+[[commands]]
+package = "ruff"
+category = "formatters"
+
+[[commands]]
 package = "treefmt"
 category = "formatters"
+
+[[commands]]
+package = "typescript"
+category = "development"
+
+[[commands]]
+package = "uv"
+category = "development"
 
 # devshell.toml ends here

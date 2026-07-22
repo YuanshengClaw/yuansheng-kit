@@ -1,0 +1,459 @@
+import { createHash } from "node:crypto";
+import {
+  chmod,
+  cp,
+  lstat,
+  mkdir,
+  mkdtemp,
+  readdir,
+  readFile,
+  realpath,
+  rm,
+  writeFile,
+} from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { basename, join, relative } from "node:path";
+
+const CAPABILITIES_ROOT = import.meta.dir;
+const FIXTURE_ROOT = join(CAPABILITIES_ROOT, "fixtures", "project");
+const PLUGIN_SOURCE = join(CAPABILITIES_ROOT, "capability-plugin.ts");
+const DEFAULT_EXPECTED_VERSION = "1.18.4";
+const PROVIDER_RESPONSE_SENTINEL = "CAPABILITY_PROVIDER_RESPONSE_SENTINEL";
+const PROCESS_TIMEOUT_MS = 30_000;
+
+type JsonRecord = Record<string, unknown>;
+
+export interface CommandResult {
+  readonly args: readonly string[];
+  readonly durationMs: number;
+  readonly exitCode: number;
+  readonly stderr: string;
+  readonly stdout: string;
+  readonly timedOut: boolean;
+}
+
+export interface ProviderRequest {
+  readonly body: unknown;
+  readonly method: string;
+  readonly path: string;
+}
+
+export interface ProbeEnvironment {
+  readonly evidenceDirectory: string;
+  readonly expectedVersion: string;
+  readonly opencodeDirectory: string;
+  readonly projectDirectory: string;
+  readonly provider: LocalProvider;
+  readonly root: string;
+  cleanup(): Promise<void>;
+  inventory(): Promise<Readonly<Record<string, string>>>;
+  run(label: string, args: readonly string[]): Promise<CommandResult>;
+}
+
+interface LocalProvider {
+  readonly baseUrl: string;
+  readonly requests: ProviderRequest[];
+  stop(): void;
+}
+
+function isJsonRecord(value: unknown): value is JsonRecord {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function providerChunk(content: string, finishReason: "stop" | null): JsonRecord {
+  return {
+    choices: [
+      {
+        delta: content.length === 0 ? { role: "assistant" } : { content },
+        finish_reason: finishReason,
+        index: 0,
+      },
+    ],
+    created: 0,
+    id: "chatcmpl-capability-probe",
+    model: "probe",
+    object: "chat.completion.chunk",
+  };
+}
+
+function providerResponse(): Response {
+  const events: unknown[] = [
+    providerChunk("", null),
+    providerChunk(PROVIDER_RESPONSE_SENTINEL, null),
+    providerChunk("", "stop"),
+    {
+      choices: [],
+      created: 0,
+      id: "chatcmpl-capability-probe",
+      model: "probe",
+      object: "chat.completion.chunk",
+      usage: {
+        completion_tokens: 1,
+        prompt_tokens: 1,
+        total_tokens: 2,
+      },
+    },
+  ];
+  const body = `${events.map((event) => `data: ${JSON.stringify(event)}\n\n`).join("")}data: [DONE]\n\n`;
+  return new Response(body, {
+    headers: {
+      "cache-control": "no-cache",
+      "content-type": "text/event-stream",
+    },
+  });
+}
+
+function startLocalProvider(evidenceDirectory: string): LocalProvider {
+  const requests: ProviderRequest[] = [];
+  let evidenceSequence = 0;
+  const server = Bun.serve({
+    hostname: "127.0.0.1",
+    port: 0,
+    async fetch(request) {
+      const url = new URL(request.url);
+      const text = await request.text();
+      let body: unknown;
+      try {
+        body = text.length === 0 ? null : JSON.parse(text);
+      } catch {
+        body = text;
+      }
+      const providerRequest = {
+        body,
+        method: request.method,
+        path: url.pathname,
+      };
+      requests.push(providerRequest);
+      evidenceSequence += 1;
+      await writeFile(
+        join(evidenceDirectory, `provider-${String(evidenceSequence).padStart(2, "0")}.json`),
+        `${JSON.stringify(providerRequest, null, 2)}\n`,
+        { encoding: "utf8", mode: 0o600 },
+      );
+
+      if (request.method !== "POST" || url.pathname !== "/v1/chat/completions") {
+        return Response.json({ error: "unexpected capability-provider request" }, { status: 404 });
+      }
+      return providerResponse();
+    },
+  });
+  return {
+    baseUrl: `http://${server.hostname}:${server.port}/v1`,
+    requests,
+    stop() {
+      server.stop(true);
+    },
+  };
+}
+
+async function makeDirectoryReadOnly(directory: string): Promise<void> {
+  const entries = await readdir(directory, { withFileTypes: true });
+  for (const entry of entries) {
+    const path = join(directory, entry.name);
+    if (entry.isDirectory()) {
+      await makeDirectoryReadOnly(path);
+      continue;
+    }
+    await chmod(path, 0o444);
+  }
+  await chmod(directory, 0o555);
+}
+
+async function makeDirectoryWritable(directory: string): Promise<void> {
+  await chmod(directory, 0o755).catch(() => undefined);
+  const entries = await readdir(directory, { withFileTypes: true }).catch(() => []);
+  for (const entry of entries) {
+    const path = join(directory, entry.name);
+    if (entry.isDirectory()) {
+      await makeDirectoryWritable(path);
+      continue;
+    }
+    await chmod(path, 0o644).catch(() => undefined);
+  }
+}
+
+async function directoryInventory(directory: string): Promise<Readonly<Record<string, string>>> {
+  const result: Record<string, string> = {};
+
+  async function visit(current: string): Promise<void> {
+    const entries = (await readdir(current, { withFileTypes: true })).sort((left, right) =>
+      left.name.localeCompare(right.name),
+    );
+    for (const entry of entries) {
+      const path = join(current, entry.name);
+      const logicalPath = relative(directory, path).replaceAll("\\", "/");
+      const status = await lstat(path);
+      const mode = (status.mode & 0o777).toString(8).padStart(3, "0");
+      if (status.isSymbolicLink()) {
+        throw new Error(`Capability fixture contains a symlink: ${logicalPath}`);
+      }
+      if (status.isDirectory()) {
+        result[logicalPath] = `directory:${mode}`;
+        await visit(path);
+        continue;
+      }
+      if (!status.isFile()) {
+        throw new Error(`Capability fixture contains a special file: ${logicalPath}`);
+      }
+      const digest = createHash("sha256")
+        .update(await readFile(path))
+        .digest("hex");
+      result[logicalPath] = `file:${mode}:sha256:${digest}`;
+    }
+  }
+
+  await visit(directory);
+  return result;
+}
+
+async function spawnCommand(
+  command: readonly string[],
+  options: {
+    readonly cwd: string;
+    readonly env: Readonly<Record<string, string>>;
+    readonly timeoutMs?: number;
+  },
+): Promise<CommandResult> {
+  const startedAt = performance.now();
+  const child = Bun.spawn([...command], {
+    cwd: options.cwd,
+    env: options.env,
+    stdin: "ignore",
+    stderr: "pipe",
+    stdout: "pipe",
+  });
+  let timedOut = false;
+  let forceTimer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = setTimeout(() => {
+    timedOut = true;
+    child.kill("SIGTERM");
+    forceTimer = setTimeout(() => child.kill("SIGKILL"), 1_000);
+  }, options.timeoutMs ?? PROCESS_TIMEOUT_MS);
+
+  const [exitCode, stdout, stderr] = await Promise.all([
+    child.exited,
+    new Response(child.stdout).text(),
+    new Response(child.stderr).text(),
+  ]);
+  clearTimeout(timeout);
+  if (forceTimer !== undefined) {
+    clearTimeout(forceTimer);
+  }
+  return {
+    args: command.slice(1),
+    durationMs: Math.round(performance.now() - startedAt),
+    exitCode,
+    stderr,
+    stdout,
+    timedOut,
+  };
+}
+
+function toolPath(): string {
+  const configured = process.env.OPENCODE_BIN;
+  if (configured !== undefined && configured.length > 0) {
+    return configured;
+  }
+  const discovered = Bun.which("opencode");
+  if (discovered === null) {
+    throw new Error("OpenCode was not found. Set OPENCODE_BIN to the locked v1.18.4 binary.");
+  }
+  return discovered;
+}
+
+async function initializeGit(projectDirectory: string, homeDirectory: string): Promise<void> {
+  const path = process.env.PATH ?? "";
+  const result = await spawnCommand(["git", "init", "--quiet"], {
+    cwd: projectDirectory,
+    env: {
+      GIT_CONFIG_GLOBAL: "/dev/null",
+      GIT_CONFIG_NOSYSTEM: "1",
+      HOME: homeDirectory,
+      PATH: path,
+    },
+  });
+  if (result.exitCode !== 0 || result.timedOut) {
+    throw new Error(`Failed to initialize the probe Git project: ${result.stderr}`);
+  }
+}
+
+async function buildPlugin(opencodeDirectory: string): Promise<void> {
+  const outputDirectory = join(opencodeDirectory, "plugins");
+  await mkdir(outputDirectory, { recursive: true });
+  const result = await Bun.build({
+    entrypoints: [PLUGIN_SOURCE],
+    format: "esm",
+    minify: false,
+    naming: "capability.js",
+    outdir: outputDirectory,
+    packages: "bundle",
+    sourcemap: "none",
+    target: "bun",
+  });
+  if (!result.success || result.outputs.length !== 1) {
+    throw new Error(
+      `Failed to bundle the capability plugin:\n${result.logs.map(String).join("\n")}`,
+    );
+  }
+}
+
+function openCodeConfig(providerBaseUrl: string): string {
+  return JSON.stringify({
+    autoupdate: false,
+    enabled_providers: ["capability"],
+    formatter: false,
+    lsp: false,
+    model: "capability/probe",
+    provider: {
+      capability: {
+        env: [],
+        models: {
+          probe: {
+            attachment: false,
+            limit: {
+              context: 4_096,
+              output: 512,
+            },
+            name: "Capability Probe",
+            reasoning: false,
+            temperature: false,
+            tool_call: true,
+          },
+        },
+        name: "Local Capability Provider",
+        npm: "@ai-sdk/openai-compatible",
+        options: {
+          apiKey: "test-only",
+          baseURL: providerBaseUrl,
+        },
+      },
+    },
+    share: "disabled",
+    snapshot: false,
+  });
+}
+
+export function parseJson(text: string): unknown {
+  return JSON.parse(text);
+}
+
+export function findRecord(
+  value: unknown,
+  predicate: (record: Readonly<JsonRecord>) => boolean,
+): Readonly<JsonRecord> | undefined {
+  if (!Array.isArray(value)) {
+    return undefined;
+  }
+  return value.find((item): item is JsonRecord => isJsonRecord(item) && predicate(item));
+}
+
+export async function createProbeEnvironment(): Promise<ProbeEnvironment> {
+  const root = await mkdtemp(join(tmpdir(), "yuansheng-opencode-capabilities-"));
+  const homeDirectory = join(root, "home");
+  const xdgConfigDirectory = join(root, "xdg-config");
+  const xdgDataDirectory = join(root, "xdg-data");
+  const xdgStateDirectory = join(root, "xdg-state");
+  const xdgCacheDirectory = join(root, "xdg-cache");
+  const temporaryDirectory = join(root, "tmp");
+  const evidenceDirectory = join(root, "evidence");
+  const projectDirectory = join(root, "project");
+  const globalConfigDirectory = join(xdgConfigDirectory, "opencode");
+  const directories = [
+    homeDirectory,
+    xdgConfigDirectory,
+    xdgDataDirectory,
+    xdgStateDirectory,
+    xdgCacheDirectory,
+    temporaryDirectory,
+    evidenceDirectory,
+    globalConfigDirectory,
+  ];
+  await Promise.all(directories.map((directory) => mkdir(directory, { recursive: true })));
+  await cp(FIXTURE_ROOT, projectDirectory, { recursive: true });
+  await initializeGit(projectDirectory, homeDirectory);
+
+  const opencodeDirectory = join(projectDirectory, ".opencode");
+  await buildPlugin(opencodeDirectory);
+  await makeDirectoryReadOnly(opencodeDirectory);
+  await makeDirectoryReadOnly(globalConfigDirectory);
+
+  const provider = startLocalProvider(evidenceDirectory);
+  const executable = await realpath(toolPath());
+  const expectedVersion =
+    process.env.OPENCODE_CAPABILITY_EXPECTED_VERSION ?? DEFAULT_EXPECTED_VERSION;
+  const environment: Record<string, string> = {
+    BUN_INSTALL_CACHE_DIR: join(xdgCacheDirectory, "bun"),
+    CAPABILITY_PROVIDER_BASE_URL: provider.baseUrl,
+    GIT_CONFIG_GLOBAL: "/dev/null",
+    GIT_CONFIG_NOSYSTEM: "1",
+    GIT_OPTIONAL_LOCKS: "0",
+    HOME: homeDirectory,
+    LANG: "C.UTF-8",
+    LC_ALL: "C.UTF-8",
+    NO_COLOR: "1",
+    NO_PROXY: "127.0.0.1,localhost",
+    NPM_CONFIG_CACHE: join(xdgCacheDirectory, "npm"),
+    OPENCODE_AUTH_CONTENT: "{}",
+    OPENCODE_CONFIG_CONTENT: openCodeConfig(provider.baseUrl),
+    OPENCODE_DISABLE_AUTOCOMPACT: "1",
+    OPENCODE_DISABLE_AUTOUPDATE: "1",
+    OPENCODE_DISABLE_CLAUDE_CODE: "1",
+    OPENCODE_DISABLE_DEFAULT_PLUGINS: "1",
+    OPENCODE_DISABLE_EXTERNAL_SKILLS: "1",
+    OPENCODE_DISABLE_LSP_DOWNLOAD: "1",
+    OPENCODE_DISABLE_MODELS_FETCH: "1",
+    OPENCODE_DISABLE_SHARE: "1",
+    OPENCODE_PLUGIN_META_FILE: join(xdgStateDirectory, "plugin-meta.json"),
+    OPENCODE_TEST_HOME: homeDirectory,
+    PATH: process.env.PATH ?? "",
+    TERM: "dumb",
+    TMPDIR: temporaryDirectory,
+    XDG_CACHE_HOME: xdgCacheDirectory,
+    XDG_CONFIG_HOME: xdgConfigDirectory,
+    XDG_DATA_HOME: xdgDataDirectory,
+    XDG_STATE_HOME: xdgStateDirectory,
+  };
+  let evidenceSequence = 0;
+
+  return {
+    evidenceDirectory,
+    expectedVersion,
+    opencodeDirectory,
+    projectDirectory,
+    provider,
+    root,
+    async cleanup() {
+      provider.stop();
+      await makeDirectoryWritable(opencodeDirectory);
+      await makeDirectoryWritable(globalConfigDirectory);
+      await rm(root, { force: true, recursive: true });
+    },
+    inventory() {
+      return directoryInventory(opencodeDirectory);
+    },
+    async run(label, args) {
+      const result = await spawnCommand([executable, ...args], {
+        cwd: projectDirectory,
+        env: environment,
+      });
+      evidenceSequence += 1;
+      const evidenceName = `${String(evidenceSequence).padStart(2, "0")}-${basename(label)}.json`;
+      await writeFile(
+        join(evidenceDirectory, evidenceName),
+        `${JSON.stringify({ label, result }, null, 2)}\n`,
+        { encoding: "utf8", mode: 0o600 },
+      );
+      return result;
+    },
+  };
+}
+
+export const CapabilitySentinels = {
+  agent: "CAPABILITY_AGENT_PROMPT_SENTINEL",
+  argument: "ARG_SENTINEL",
+  command: "CAPABILITY_COMMAND_TEMPLATE_SENTINEL",
+  provider: PROVIDER_RESPONSE_SENTINEL,
+  skill: "CAPABILITY_SKILL_BODY_SENTINEL",
+  toolInput: "TOOL_INPUT_SENTINEL",
+  toolResult: "CAPABILITY_TOOL_RESULT_SENTINEL",
+} as const;

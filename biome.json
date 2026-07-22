@@ -4,6 +4,7 @@
   "vcs": {
     "enabled": true,
     "clientKind": "git",
+    "root": ".",
     "useIgnoreFile": true
   },
 
@@ -35,7 +36,7 @@
   "linter": {
     "enabled": true,
     "rules": {
-      "recommended": true
+      "preset": "recommended"
     }
   },
 
@@ -49,13 +50,10 @@
 
   "files": {
     "includes": [
-      "**/*.ts",
-      "**/*.json",
-      "**/*.jsonc",
-      "!!**/.direnv",
-      "!!**/node_modules",
-      "!!**/dist",
-      "!!**/.git"
+      "**/*.{cjs,cts,js,json,jsonc,jsx,mjs,mts,ts,tsx}",
+      "!!**/.#*",
+      "!!**/{.direnv,.git,.mypy_cache,.pytest_cache,.ruff_cache,.venv,coverage,dist,node_modules,result}",
+      "!!**/result-*"
     ]
   }
 }

@@ -1,0 +1,11 @@
+line-length = 79
+target-version = "py314"
+
+[lint]
+extend-select = ["D", "E501", "W505"]
+
+[lint.pycodestyle]
+max-doc-length = 72
+
+[lint.pydocstyle]
+convention = "pep257"

@@ -17,6 +17,8 @@
 
     "verbatimModuleSyntax": true,
     "isolatedModules": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
 
     "allowImportingTsExtensions": false,
 
@@ -25,7 +27,15 @@
     "noEmit": true
   },
 
-  "include": ["**/*.ts"],
+  "include": [
+    "plugins/trace/opencode/src/**/*.ts",
+    "plugins/trace/opencode/tests/**/*.ts",
+    "plugins/trace/tools/src/**/*.ts",
+    "plugins/trace/tools/tests/**/*.ts",
+    "tests/**/*.ts",
+    "tools/plugin-builder/src/**/*.ts",
+    "tools/plugin-builder/tests/**/*.ts"
+  ],
 
-  "exclude": ["node_modules"]
+  "exclude": ["coverage", "dist", "node_modules"]
 }

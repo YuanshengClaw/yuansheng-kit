@@ -8,4 +8,17 @@
 /result
 /result-*
 
+# python
+**/__pycache__/
+*.py[cod]
+**/.mypy_cache/
+**/.pytest_cache/
+**/.ruff_cache/
+**/.venv/
+
+# typescript
+/coverage
+/dist
+**/node_modules/
+
 # .gitignore ends here

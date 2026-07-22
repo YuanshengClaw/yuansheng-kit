@@ -16,7 +16,6 @@ includes = [
     "*.d.mts",
     "*.json",
     "*.jsonc",
-    "*.css",
 ]
 options = ["check", "--write", "--no-errors-on-unmatched", "--config-path", "biome.json"]
 
