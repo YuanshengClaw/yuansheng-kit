@@ -1,6 +1,12 @@
 {
   "$schema": "https://biomejs.dev/schemas/2.5.4/schema.json",
 
+  "vcs": {
+    "enabled": true,
+    "clientKind": "git",
+    "useIgnoreFile": true
+  },
+
   "formatter": {
     "enabled": true,
     "useEditorconfig": true,
@@ -42,6 +48,14 @@
   },
 
   "files": {
-    "includes": ["**/*.ts", "**/*.json", "**/*.jsonc", "!**/node_modules", "!**/dist", "!**/.git"]
+    "includes": [
+      "**/*.ts",
+      "**/*.json",
+      "**/*.jsonc",
+      "!!**/.direnv",
+      "!!**/node_modules",
+      "!!**/dist",
+      "!!**/.git"
+    ]
   }
 }

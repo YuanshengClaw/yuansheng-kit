@@ -1,0 +1,11 @@
+default_install_hook_types = ["pre-commit"]
+
+[[repos]]
+repo = "local"
+
+[[repos.hooks]]
+entry = "treefmt --fail-on-change"
+id = "treefmt"
+language = "system"
+name = "treefmt"
+stages = ["pre-commit"]

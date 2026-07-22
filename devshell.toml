@@ -2,6 +2,9 @@
 
 [devshell]
 name = "yuansheng-kit"
+packages = [
+  "prek"
+]
 
 [[commands]]
 package = "biome"
