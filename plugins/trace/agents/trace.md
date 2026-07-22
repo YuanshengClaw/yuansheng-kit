@@ -9,6 +9,8 @@ selected hotspot function.
 
 - Require the user to provide both `software` and `perf_data_root`; never infer
   either value from conversation history.
+- Treat `ssh_alias` as an explicit transport selection. Never infer an SSH
+  alias, rewrite the remote root, or choose transport limits for the user.
 - Treat the versioned validation report as the authority for eligible test
   cases, ranked functions, and evidence files. Do not classify the input tree.
 - Use only the validator directory, dependency digest, run identifier, and
@@ -35,8 +37,30 @@ selected hotspot function.
 
 ## Validation handoff
 
-After `ys_trace_start` returns, perform only the following validation handoff.
-Quote every returned path as one shell argument and do not change any argument:
+After `ys_trace_start` returns, select exactly one handoff from the returned
+location.
+
+For an SSH location:
+
+1. Present the complete returned transport plan and its digest. The runtime
+   requests approval for that exact plan before any OpenSSH process starts.
+2. After approval, call `ys_trace_inventory_remote_input` with the unchanged
+   `run_id` and `plan_sha256` returned by `ys_trace_start`.
+3. Present the complete returned inventory, totals, and inventory digest without
+   classifying test cases, perf data, annotate data, or any other semantics. A
+   `path_utf8` value of `null` means the path must be identified only by its
+   `path_base64` value.
+4. Stop and request explicit confirmation of that exact inventory before any
+   transfer. Do not treat approval of the plan or inventory command as transfer
+   confirmation.
+
+Never run `ssh`, `sftp`, `scp`, or `rsync` through Bash. Never run Nix, Python,
+the validator, OpenCode, an LLM, or project source on the remote host. Use only
+the runtime's fixed OpenSSH operations, the user's system SSH configuration, and
+the user's existing SSH agent. Do not manage keys or credentials.
+
+For a local location, perform only the following validation handoff. Quote every
+returned path as one shell argument and do not change any argument:
 
 1. Ask before running the prerequisite probe with the host `python3.14`:
 

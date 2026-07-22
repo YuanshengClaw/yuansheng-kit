@@ -61,6 +61,7 @@ interface RuntimeConfiguration {
   readonly destination: string;
   readonly entrypointResource: string;
   readonly external: readonly string[];
+  readonly inventoryTool: string;
   readonly packageResource: string;
   readonly reportTool: string;
   readonly startTool: string;
@@ -303,6 +304,7 @@ function parseRuntime(value: unknown): RuntimeConfiguration {
       "destination",
       "entrypoint_resource",
       "external",
+      "inventory_tool",
       "package_resource",
       "report_tool",
       "start_tool",
@@ -313,12 +315,17 @@ function parseRuntime(value: unknown): RuntimeConfiguration {
   if (!/^[0-9a-f]{64}$/u.test(bundleSha256)) {
     fail("runtime.bundle_sha256 must be a lowercase SHA-256 digest");
   }
+  const inventoryTool = requireString(runtime.inventory_tool, "runtime.inventory_tool");
   const reportTool = requireString(runtime.report_tool, "runtime.report_tool");
   const startTool = requireString(runtime.start_tool, "runtime.start_tool");
-  if (!SAFE_PERMISSION_NAME.test(reportTool) || !SAFE_PERMISSION_NAME.test(startTool)) {
+  if (
+    !SAFE_PERMISSION_NAME.test(inventoryTool) ||
+    !SAFE_PERMISSION_NAME.test(reportTool) ||
+    !SAFE_PERMISSION_NAME.test(startTool)
+  ) {
     fail("runtime tools must be normalized OpenCode tool identifiers");
   }
-  if (reportTool === startTool) {
+  if (new Set([inventoryTool, reportTool, startTool]).size !== 3) {
     fail("runtime tools must be distinct");
   }
   return {
@@ -329,6 +336,7 @@ function parseRuntime(value: unknown): RuntimeConfiguration {
       "runtime.entrypoint_resource",
     ),
     external: requireUniqueStringArray(runtime.external, "runtime.external", SAFE_NODE_BUILTIN),
+    inventoryTool,
     packageResource: requireIdentifier(runtime.package_resource, "runtime.package_resource"),
     reportTool,
     startTool,
@@ -385,14 +393,20 @@ function parseConfiguration(value: unknown): OpenCodeConfiguration {
       "webfetch",
       "websearch",
       "write",
+      "ys_trace_inventory_remote_input",
       "ys_trace_provide_validation_report",
+      "ys_trace_ssh_transport",
       "ys_trace_start",
     ],
     "permissions",
   );
   const permissions = parsePermissions(configuration.permissions);
   const runtime = parseRuntime(configuration.runtime);
-  if (permissions[runtime.startTool] !== "allow" || permissions[runtime.reportTool] !== "allow") {
+  if (
+    permissions[runtime.startTool] !== "allow" ||
+    permissions[runtime.reportTool] !== "allow" ||
+    permissions[runtime.inventoryTool] !== "allow"
+  ) {
     fail("runtime tool permissions must be allow");
   }
   if (
@@ -402,7 +416,8 @@ function parseConfiguration(value: unknown): OpenCodeConfiguration {
     permissions.skill !== "allow" ||
     permissions.webfetch !== "deny" ||
     permissions.websearch !== "deny" ||
-    permissions.write !== "deny"
+    permissions.write !== "deny" ||
+    permissions.ys_trace_ssh_transport !== "ask"
   ) {
     fail("non-Bash permissions do not match the read-only runtime policy");
   }
@@ -503,7 +518,7 @@ function generateCommand(configuration: OpenCodeConfiguration, body: string): Ui
       "",
       `User input: ${configuration.command.argumentPlaceholder}`,
       "",
-      `After collecting both required inputs, call ${configuration.runtime.startTool} with those exact values and the optional artifact_root override. Present the returned absolute artifact_root before any later effect.`,
+      `After collecting both required inputs, call ${configuration.runtime.startTool} with those exact values and the optional artifact_root override. For an explicitly requested SSH source, also pass the exact ssh_alias and any user-specified ssh_limits; never infer an alias. Present the returned absolute artifact_root and exact transport plan before any later effect. After approval, use ${configuration.runtime.inventoryTool} only for the returned run and plan digest, present the complete inventory, and stop for explicit transfer confirmation.`,
       "",
       body,
     ].join("\n"),

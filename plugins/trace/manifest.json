@@ -60,15 +60,31 @@
       "requires": []
     },
     {
+      "id": "opencode-openssh-runtime",
+      "kind": "platform-runtime",
+      "logical_path": "opencode/src/openssh-runtime.ts",
+      "source": {
+        "kind": "file",
+        "path": "plugins/trace/opencode/src/openssh-runtime.ts",
+        "sha256": "37e728ef6ab86f52a4c7c26515df5b3544f1fe281c28439ed088d5699347f382"
+      },
+      "requires": ["ssh-transport"]
+    },
+    {
       "id": "opencode-runtime-entry",
       "kind": "platform-runtime",
       "logical_path": "opencode/src/index.ts",
       "source": {
         "kind": "file",
         "path": "plugins/trace/opencode/src/index.ts",
-        "sha256": "c529a15de71100bcbb92eead1a1621587de15df98ca2ed249f4dab3a6b10ed88"
+        "sha256": "86dba4056b061205b746fb7fa7e598e0879248fdb48f58224750b0f74561ab85"
       },
-      "requires": ["hardware-profile", "trace-workflow"]
+      "requires": [
+        "hardware-profile",
+        "opencode-openssh-runtime",
+        "ssh-transport",
+        "trace-workflow"
+      ]
     },
     {
       "id": "opencode-platform-handler",
@@ -77,7 +93,7 @@
       "source": {
         "kind": "file",
         "path": "plugins/trace/opencode/src/platform-handler.ts",
-        "sha256": "1503faecd1dbb91e0dfb3ddb2ecfd44ebfaccb652956df8142046c5f6eef7ba9"
+        "sha256": "14d018cc49c66263934978ace642dcd9b5a3d5b1895c5e0a98ccc8653ecd0544"
       },
       "requires": [
         "opencode-package",
@@ -193,13 +209,24 @@
       "requires": []
     },
     {
+      "id": "ssh-transport",
+      "kind": "runtime-library",
+      "logical_path": "transport/ssh-transport.ts",
+      "source": {
+        "kind": "file",
+        "path": "plugins/trace/transport/ssh-transport.ts",
+        "sha256": "d9af1a2e32ef417c51a18f80af1c5c1272cf96f090f2f26d093a05735aaec983"
+      },
+      "requires": ["root-cause-canonical-json"]
+    },
+    {
       "id": "trace-agent",
       "kind": "agent",
       "logical_path": "agents/trace.md",
       "source": {
         "kind": "file",
         "path": "plugins/trace/agents/trace.md",
-        "sha256": "4b9239ca0ee6772a71a286d351a9acfe235c1a93af5308399a3809a3bab8fb82"
+        "sha256": "519509c5c14d25657b038018265026174a5b3ff7e68b110d76a4581da4e613d3"
       },
       "requires": ["write-root-cause-blueprint-skill"]
     },
@@ -210,7 +237,7 @@
       "source": {
         "kind": "file",
         "path": "plugins/trace/commands/trace.md",
-        "sha256": "a851004b82bbcc4957e73f5271bdab02899b0ad649ad2c4615ae7ed57e4ee9e8"
+        "sha256": "56bae5d18b15fab45fd8796d73413608d8faf4bd36edff8b49529918328fdc46"
       },
       "requires": ["trace-agent", "trace-workflow"]
     },
@@ -292,14 +319,17 @@
           "webfetch": "deny",
           "websearch": "deny",
           "write": "deny",
+          "ys_trace_inventory_remote_input": "allow",
           "ys_trace_provide_validation_report": "allow",
+          "ys_trace_ssh_transport": "ask",
           "ys_trace_start": "allow"
         },
         "runtime": {
-          "bundle_sha256": "72f6f08028a82c6689cb5151a7b2f9aeddb000b6ed47c09fb87c2e749f7fc0df",
+          "bundle_sha256": "452778c558364e4437d044bbc41f5bfce6e4530c3fa079c1e984d3f7120e43f5",
           "destination": ".opencode/plugins/ys-trace.js",
           "entrypoint_resource": "opencode-runtime-entry",
           "external": ["node:crypto", "node:fs", "node:fs/promises", "node:path", "node:url"],
+          "inventory_tool": "ys_trace_inventory_remote_input",
           "package_resource": "opencode-package",
           "report_tool": "ys_trace_provide_validation_report",
           "start_tool": "ys_trace_start"

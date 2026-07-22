@@ -15,6 +15,16 @@ import { fileURLToPath } from "node:url";
 import { type Plugin, tool } from "@opencode-ai/plugin";
 
 import { canonicalizeJson } from "../../../../tools/yuansheng-root-cause-blueprint/src/canonical-json";
+import {
+  createSshTransportPlan,
+  createSshTransportState,
+  parseSshInventory,
+  SSH_TRANSPORT_PROTOCOL_MARKERS,
+  SshTransportError,
+  type SshTransportLimits,
+  type SshTransportState,
+  transitionSshTransport,
+} from "../../transport/ssh-transport";
 import { parseSg2044HardwareProfile } from "../../workflows/hardware-profile";
 import { parsePerfDataValidationReportV1 } from "../../workflows/perf-data-validation-report";
 import {
@@ -22,10 +32,16 @@ import {
   type TraceTransition,
   transitionTraceWorkflow,
 } from "../../workflows/trace-workflow";
+import {
+  discoverOpenSshExecutables,
+  OpenSshRuntimeError,
+  runApprovedSshOperation,
+} from "./openssh-runtime";
 
 const DEFAULT_ARTIFACT_ROOT = ".opencode/yuansheng/blueprint";
 const REPORT_FILENAME = "perf-data-validation-report-v1.json";
 const REPORT_PATH_SEGMENTS = ["yuansheng-kit", "ys-trace", "reports"] as const;
+const SSH_STAGING_PATH_SEGMENTS = ["yuansheng-kit", "ys-trace", "ssh"] as const;
 const MAX_REPORT_BYTES = 16 * 1024 * 1024;
 const MAX_TOOL_FILE_BYTES = 16 * 1024 * 1024;
 const MAX_TOOL_FILES = 4096;
@@ -51,6 +67,7 @@ type RuntimeErrorCode =
   | "report_receipt_mismatch"
   | "report_rejected"
   | "report_unavailable"
+  | "remote_transport_failed"
   | "validator_unavailable";
 
 type ToolFileMode = "0644" | "0755";
@@ -76,6 +93,13 @@ interface RunRecord {
   readonly reportPath: string;
   reportInFlight: boolean;
   transition: TraceTransition;
+}
+
+interface PendingRemoteRun {
+  readonly artifactRoot: string;
+  inventoryInFlight: boolean;
+  readonly software: string;
+  transport: SshTransportState;
 }
 
 interface BoundReportDirectory {
@@ -107,6 +131,16 @@ function boundedError(error: unknown, code: RuntimeErrorCode, message: string): 
   return error instanceof TraceRuntimeError ? error : new TraceRuntimeError(code, message);
 }
 
+function boundedTransportError(error: unknown, message: string): TraceRuntimeError {
+  if (error instanceof TraceRuntimeError) {
+    return error;
+  }
+  if (error instanceof OpenSshRuntimeError || error instanceof SshTransportError) {
+    return new TraceRuntimeError("remote_transport_failed", error.message);
+  }
+  return new TraceRuntimeError("remote_transport_failed", message);
+}
+
 function errorCode(error: unknown): string | undefined {
   if (typeof error !== "object" || error === null || !("code" in error)) {
     return undefined;
@@ -118,6 +152,50 @@ function checkCancelled(signal: AbortSignal | undefined): void {
   if (signal?.aborted === true) {
     fail("operation_cancelled", "Yuansheng Trace operation was cancelled");
   }
+}
+
+function requireRemoteSoftware(value: string): string {
+  if (
+    value.trim().length === 0 ||
+    value === "." ||
+    value === ".." ||
+    value.includes("/") ||
+    value.includes("\\") ||
+    value.includes("\0") ||
+    value.normalize("NFC") !== value ||
+    UTF8_ENCODER.encode(value).byteLength > 255
+  ) {
+    fail("invalid_path", "software must be a single safe artifact path segment");
+  }
+  for (const character of value) {
+    const codePoint = character.codePointAt(0) ?? 0;
+    if (codePoint < 0x20 || codePoint === 0x7f) {
+      fail("invalid_path", "software must not contain control characters");
+    }
+  }
+  return value;
+}
+
+function sshLimits(input: {
+  readonly command_timeout_milliseconds?: number | undefined;
+  readonly max_depth?: number | undefined;
+  readonly max_entries?: number | undefined;
+  readonly max_file_bytes?: number | undefined;
+  readonly max_files?: number | undefined;
+  readonly max_path_bytes?: number | undefined;
+  readonly max_total_bytes?: number | undefined;
+}): Partial<SshTransportLimits> {
+  return {
+    ...(input.command_timeout_milliseconds === undefined
+      ? {}
+      : { commandTimeoutMilliseconds: input.command_timeout_milliseconds }),
+    ...(input.max_depth === undefined ? {} : { maxDepth: input.max_depth }),
+    ...(input.max_entries === undefined ? {} : { maxEntries: input.max_entries }),
+    ...(input.max_file_bytes === undefined ? {} : { maxFileBytes: input.max_file_bytes }),
+    ...(input.max_files === undefined ? {} : { maxFiles: input.max_files }),
+    ...(input.max_path_bytes === undefined ? {} : { maxPathBytes: input.max_path_bytes }),
+    ...(input.max_total_bytes === undefined ? {} : { maxTotalBytes: input.max_total_bytes }),
+  };
 }
 
 function compareUtf8(left: string, right: string): number {
@@ -449,6 +527,10 @@ function reportPaths(runId: string): Readonly<{ directory: string; parent: strin
   return { directory, parent, path: join(directory, REPORT_FILENAME) };
 }
 
+function sshStagingRoot(runId: string): string {
+  return resolve(reportBaseDirectory(), ...SSH_STAGING_PATH_SEGMENTS, runId);
+}
+
 function requireExactReportPath(received: string, expected: string): void {
   if (
     received.length === 0 ||
@@ -663,6 +745,7 @@ async function cleanupReport(run: RunRecord): Promise<boolean> {
 
 export const YuanshengTracePlugin: Plugin = async () => {
   const sessions = new Map<string, Map<string, RunRecord>>();
+  const remoteSessions = new Map<string, Map<string, PendingRemoteRun>>();
   const activeRunIds = new Set<string>();
 
   function createRunId(): string {
@@ -692,14 +775,128 @@ export const YuanshengTracePlugin: Plugin = async () => {
     }
   }
 
+  function registerRemoteRun(sessionId: string, runId: string, run: PendingRemoteRun): void {
+    const sessionRuns = remoteSessions.get(sessionId) ?? new Map<string, PendingRemoteRun>();
+    sessionRuns.set(runId, run);
+    remoteSessions.set(sessionId, sessionRuns);
+  }
+
+  function deleteRemoteRun(sessionId: string, runId: string, run: PendingRemoteRun): void {
+    const sessionRuns = remoteSessions.get(sessionId);
+    if (sessionRuns?.get(runId) !== run) {
+      return;
+    }
+    sessionRuns.delete(runId);
+    activeRunIds.delete(runId);
+    if (sessionRuns.size === 0) {
+      remoteSessions.delete(sessionId);
+    }
+  }
+
   return {
     async dispose() {
       const runs = [...sessions.values()].flatMap((sessionRuns) => [...sessionRuns.values()]);
       sessions.clear();
+      remoteSessions.clear();
       activeRunIds.clear();
       await Promise.all(runs.map((run) => cleanupReport(run)));
     },
     tool: {
+      ys_trace_inventory_remote_input: tool({
+        description:
+          "Run the exactly approved read-only OpenSSH probe and inventory for a pending Yuansheng Trace remote input.",
+        args: {
+          plan_sha256: tool.schema.string().regex(SHA256),
+          run_id: tool.schema.string().regex(RUN_ID),
+        },
+        async execute({ plan_sha256, run_id }, context) {
+          const run = remoteSessions.get(context.sessionID)?.get(run_id);
+          if (run === undefined) {
+            fail("invalid_run", "The remote trace run is unknown in this OpenCode session");
+          }
+          if (
+            run.transport.phase !== "awaiting_inventory" ||
+            run.transport.plan.plan_sha256 !== plan_sha256
+          ) {
+            fail("invalid_run", "The remote trace run is not waiting for this exact inventory");
+          }
+          if (run.inventoryInFlight) {
+            fail("invalid_run", "The remote trace run is already collecting its inventory");
+          }
+          run.inventoryInFlight = true;
+          let inventoryAttempted = false;
+          try {
+            const probe = await runApprovedSshOperation(run.transport, "probe", context.abort);
+            const expectedProbe = UTF8_ENCODER.encode(`${SSH_TRANSPORT_PROTOCOL_MARKERS.probe}\n`);
+            if (!bytesEqual(probe.stdout, expectedProbe)) {
+              throw new TraceRuntimeError(
+                "remote_transport_failed",
+                "The remote OpenSSH capability probe returned an invalid response",
+              );
+            }
+            inventoryAttempted = true;
+            const response = await runApprovedSshOperation(
+              run.transport,
+              "inventory",
+              context.abort,
+            );
+            const inventory = parseSshInventory(response.stdout, run.transport.plan);
+            run.transport = transitionSshTransport(run.transport, {
+              inventory,
+              type: "bind_inventory",
+            });
+            inventoryAttempted = false;
+            run.inventoryInFlight = false;
+            context.metadata({
+              metadata: {
+                directories: inventory.inventory.directories,
+                files: inventory.inventory.files,
+                inventory_sha256: inventory.inventory_sha256,
+                plan_sha256,
+                run_id,
+                total_file_bytes: inventory.inventory.total_file_bytes,
+              },
+              title: `Yuansheng Trace inventory: ${inventory.inventory_sha256}`,
+            });
+            return JSON.stringify({
+              inventory: inventory.inventory,
+              inventory_sha256: inventory.inventory_sha256,
+              next_action: "await_explicit_transfer_confirmation",
+              phase: run.transport.phase,
+              plan_sha256,
+              run_id,
+            });
+          } catch (error) {
+            let cleanupFailed = false;
+            if (inventoryAttempted) {
+              try {
+                const cleanup = await runApprovedSshOperation(
+                  run.transport,
+                  "inventory_cleanup",
+                  new AbortController().signal,
+                );
+                const expectedCleanup = UTF8_ENCODER.encode(
+                  `${SSH_TRANSPORT_PROTOCOL_MARKERS.inventoryCleanup}\n`,
+                );
+                cleanupFailed = !bytesEqual(cleanup.stdout, expectedCleanup);
+              } catch {
+                cleanupFailed = true;
+              }
+            }
+            deleteRemoteRun(context.sessionID, run_id, run);
+            if (cleanupFailed) {
+              throw new TraceRuntimeError(
+                "remote_transport_failed",
+                `Remote inventory failed and may have left ${run.transport.plan.plan.remote_inventory_temp}`,
+              );
+            }
+            throw boundedTransportError(
+              error,
+              "The approved remote inventory operation could not be completed",
+            );
+          }
+        },
+      }),
       ys_trace_provide_validation_report: tool({
         description:
           "Verify and consume the exact perf data validation report bound to a Yuansheng Trace run.",
@@ -808,15 +1005,106 @@ export const YuanshengTracePlugin: Plugin = async () => {
       }),
       ys_trace_start: tool({
         description:
-          "Resolve Yuansheng Trace paths, discover the installed validator, and start an in-memory trace run without executing the validator.",
+          "Resolve Yuansheng Trace local paths or prepare an exact OpenSSH plan, without executing the validator.",
         args: {
           artifact_root: tool.schema.string().optional(),
           perf_data_root: tool.schema.string(),
+          ssh_alias: tool.schema.string().optional(),
+          ssh_limits: tool.schema
+            .object({
+              command_timeout_milliseconds: tool.schema.number().int().positive().optional(),
+              max_depth: tool.schema.number().int().positive().optional(),
+              max_entries: tool.schema.number().int().positive().optional(),
+              max_file_bytes: tool.schema.number().int().positive().optional(),
+              max_files: tool.schema.number().int().positive().optional(),
+              max_path_bytes: tool.schema.number().int().positive().optional(),
+              max_total_bytes: tool.schema.number().int().positive().optional(),
+            })
+            .strict()
+            .optional(),
           software: tool.schema.string(),
         },
-        async execute({ artifact_root, perf_data_root, software }, context) {
+        async execute({ artifact_root, perf_data_root, software, ssh_alias, ssh_limits }, context) {
           const projectRoot = requireProjectRoot(context.worktree, context.directory);
           const resolvedArtifactRoot = resolveArtifactRoot(projectRoot, artifact_root);
+          if (ssh_alias !== undefined) {
+            const remoteSoftware = requireRemoteSoftware(software);
+            const remoteRunId = createRunId();
+            let remoteRunRegistered = false;
+            try {
+              const executables = await discoverOpenSshExecutables();
+              const plan = createSshTransportPlan({
+                alias: ssh_alias,
+                ...(ssh_limits === undefined ? {} : { limits: sshLimits(ssh_limits) }),
+                localStagingRoot: sshStagingRoot(remoteRunId),
+                remoteRoot: perf_data_root,
+                runId: remoteRunId,
+                sessionId: context.sessionID,
+                sftpExecutable: executables.sftp.path,
+                sftpExecutableSha256: executables.sftp.sha256,
+                sshExecutable: executables.ssh.path,
+                sshExecutableSha256: executables.ssh.sha256,
+              });
+              let transport = createSshTransportState(plan, {
+                runId: remoteRunId,
+                sessionId: context.sessionID,
+              });
+              context.metadata({
+                metadata: {
+                  artifact_root: resolvedArtifactRoot,
+                  plan: plan.plan,
+                  plan_sha256: plan.plan_sha256,
+                  run_id: remoteRunId,
+                },
+                title: `Yuansheng Trace SSH plan: ${plan.plan_sha256}`,
+              });
+              await context.ask({
+                always: [plan.plan_sha256],
+                metadata: {
+                  artifact_root: resolvedArtifactRoot,
+                  plan: plan.plan,
+                  plan_sha256: plan.plan_sha256,
+                  run_id: remoteRunId,
+                },
+                patterns: [plan.plan_sha256],
+                permission: "ys_trace_ssh_transport",
+              });
+              transport = transitionSshTransport(transport, {
+                plan_sha256: plan.plan_sha256,
+                type: "approve_plan",
+              });
+              const remoteRun: PendingRemoteRun = {
+                artifactRoot: resolvedArtifactRoot,
+                inventoryInFlight: false,
+                software: remoteSoftware,
+                transport,
+              };
+              registerRemoteRun(context.sessionID, remoteRunId, remoteRun);
+              remoteRunRegistered = true;
+              return JSON.stringify({
+                artifact_root: resolvedArtifactRoot,
+                location: plan.plan.location,
+                next_tool: "ys_trace_inventory_remote_input",
+                phase: transport.phase,
+                plan: plan.plan,
+                plan_sha256: plan.plan_sha256,
+                run_id: remoteRunId,
+                software: remoteSoftware,
+              });
+            } catch (error) {
+              throw boundedTransportError(
+                error,
+                "The Yuansheng Trace SSH plan could not be prepared",
+              );
+            } finally {
+              if (!remoteRunRegistered) {
+                activeRunIds.delete(remoteRunId);
+              }
+            }
+          }
+          if (ssh_limits !== undefined) {
+            fail("invalid_path", "ssh_limits requires an explicit ssh_alias");
+          }
           const resolvedPerfDataRoot = resolvePerfDataRoot(projectRoot, perf_data_root);
           const validator = await inspectInstalledValidator(context.abort);
           const profile = parseSg2044HardwareProfile(

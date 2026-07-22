@@ -224,9 +224,14 @@ test("OpenCode API imports stay inside the platform layer and its tests", async 
 });
 
 test("platform-neutral trace assets do not contain OpenCode registration markers", async () => {
-  const sharedDirectories = ["agents", "commands", "resources", "skills", "workflows"].map((name) =>
-    join(WORKSPACE_ROOT, "plugins/trace", name),
-  );
+  const sharedDirectories = [
+    "agents",
+    "commands",
+    "resources",
+    "skills",
+    "transport",
+    "workflows",
+  ].map((name) => join(WORKSPACE_ROOT, "plugins/trace", name));
   const files = (await Promise.all(sharedDirectories.map(collectFiles))).flat();
   const offenders: string[] = [];
   for (const path of files) {

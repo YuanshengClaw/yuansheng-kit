@@ -11,6 +11,7 @@ import {
 } from "./capabilities/harness";
 
 const WORKSPACE_ROOT = join(import.meta.dir, "../../..");
+const INVENTORY_TOOL_ID = "ys_trace_inventory_remote_input";
 const REPORT_TOOL_ID = "ys_trace_provide_validation_report";
 const START_TOOL_ID = "ys_trace_start";
 
@@ -26,7 +27,7 @@ interface RuntimeToolContext {
 }
 
 interface RuntimeTool {
-  execute(args: Readonly<Record<string, string>>, context: RuntimeToolContext): Promise<unknown>;
+  execute(args: Readonly<Record<string, unknown>>, context: RuntimeToolContext): Promise<unknown>;
 }
 
 interface InstalledPluginHooks {
@@ -205,6 +206,7 @@ test("the formal Yuansheng Trace artifact loads and starts its pre-validator wor
       if (!Array.isArray(toolIds)) {
         throw new Error("OpenCode tool IDs endpoint did not return an array");
       }
+      expect(toolIds).toContain(INVENTORY_TOOL_ID);
       expect(toolIds).toContain(START_TOOL_ID);
       expect(toolIds).toContain(REPORT_TOOL_ID);
     } finally {
@@ -217,8 +219,9 @@ test("the formal Yuansheng Trace artifact loads and starts its pre-validator wor
     const hooks = await pluginModule.YuanshengTracePlugin({} as never);
     try {
       const startTool = hooks.tool?.[START_TOOL_ID];
+      const inventoryTool = hooks.tool?.[INVENTORY_TOOL_ID];
       const reportTool = hooks.tool?.[REPORT_TOOL_ID];
-      if (startTool === undefined || reportTool === undefined) {
+      if (startTool === undefined || inventoryTool === undefined || reportTool === undefined) {
         throw new Error("Installed Yuansheng Trace tools are unavailable");
       }
       const session = runtimeContext(environment, "validation-session");
@@ -295,6 +298,49 @@ test("the formal Yuansheng Trace artifact loads and starts its pre-validator wor
           session,
         ),
       ).rejects.toThrow("unknown in this OpenCode session");
+
+      const sshApprovals: unknown[] = [];
+      const sshSession: RuntimeToolContext = {
+        ...runtimeContext(environment, "ssh-plan-session"),
+        async ask(input) {
+          sshApprovals.push(input);
+        },
+      };
+      const sshAlias = "ys-trace-unconfigured.invalid";
+      const remoteRoot = "/srv/yuansheng/perf-data";
+      const remoteStart = toolOutput(
+        "remote plan start",
+        await startTool.execute(
+          {
+            perf_data_root: remoteRoot,
+            software: "openblas",
+            ssh_alias: sshAlias,
+          },
+          sshSession,
+        ),
+      );
+      expect(remoteStart).toMatchObject({
+        location: {
+          alias: sshAlias,
+          kind: "ssh",
+          remote_root_utf8: remoteRoot,
+        },
+        next_tool: INVENTORY_TOOL_ID,
+        phase: "awaiting_inventory",
+      });
+      expect(remoteStart.plan_sha256).toMatch(/^[0-9a-f]{64}$/u);
+      const remotePlan = requireRecord("remote transport plan", remoteStart.plan);
+      const executableSha256 = requireRecord(
+        "remote transport executable digests",
+        remotePlan.executable_sha256,
+      );
+      expect(executableSha256.ssh).toMatch(/^[0-9a-f]{64}$/u);
+      expect(executableSha256.sftp).toMatch(/^[0-9a-f]{64}$/u);
+      expect(sshApprovals).toHaveLength(1);
+      expect(requireRecord("remote transport approval", sshApprovals[0])).toMatchObject({
+        permission: "ys_trace_ssh_transport",
+        patterns: [remoteStart.plan_sha256],
+      });
     } finally {
       await hooks.dispose?.();
       restoreRuntimeEnvironment();
