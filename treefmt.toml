@@ -26,5 +26,6 @@ options = ["--extensions=footnote", "--extensions=frontmatter", "--extensions=gf
 
 [formatter.nix]
 command = "nixfmt"
+excludes = ["bun.nix"]
 includes = ["*.nix"]
 options = ["--width=50"]
