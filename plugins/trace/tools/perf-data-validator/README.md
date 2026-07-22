@@ -1,29 +1,36 @@
 # perf-data-validator
 
-`perf-data-validator` 是 `trace` 插件独立维护和交付的 Python 组件。它的 `pyproject.toml`、唯一依赖锁
-`uv.lock` 和 `tests/` 都位于本目录。仓库根不包含该组件的 Python 项目元数据或依赖锁。后续实现任务将在这里创建
-`src/perf_data_validator/`。
+`perf-data-validator` is a self-contained Python tool of the `ys-trace` plugin.
+Plugin assembly copies the tracked contents of this directory unchanged. The
+tool is not a Bun workspace, and the assembly process does not build, install,
+wrap, or rewrite it.
 
-开发与测试环境使用 CPython `3.14.x`：
+The target Agent discovers the copied tool, reads this documentation and its
+Python metadata, prepares a compatible isolated environment, and invokes the
+module directly. Platform-specific plugin code does not own the tool environment
+and does not duplicate its validation rules.
+
+The environment metadata targets CPython `3.14.x`. Its dependency lock can be
+checked without changing it:
 
 ```text
 uv lock --check
-uv run --locked pytest
-mypy --strict
 ```
 
-全仓 Python 格式化与 lint 规则由根目录 `ruff.toml` 提供：
+The root `ruff.toml` provides repository-wide Python formatting and lint rules:
 
 ```text
 ruff format --check .
 ruff check .
 ```
 
-正式实现由后续迁移任务完成，唯一产品入口冻结为：
+The only product entry point is frozen as:
 
 ```text
 python -m perf_data_validator
 ```
 
-该组件以源码目录直接进入插件产物，不构建 wheel、sdist、zipapp、console script 或冻结二进制。`uv` 只服务开发和
-CI，不是安装后运行时前提。
+The component is distributed as source inside the plugin artifact. It does not
+build a wheel, sdist, zipapp, console script, or frozen binary. `pyproject.toml`
+and `uv.lock` describe a reproducible development environment; invoking the
+installed tool does not require `uv` itself.

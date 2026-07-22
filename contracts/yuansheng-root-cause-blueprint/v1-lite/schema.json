@@ -1,0 +1,687 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:yuansheng-kit:contracts:yuansheng-root-cause-blueprint:v1-lite",
+  "title": "Yuansheng Root Cause Blueprint v1-lite",
+  "description": "Stable machine contract between Yuansheng Trace root-cause analysis and human review.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "meta",
+    "section1_basic_info",
+    "section2_summary",
+    "section3_key_evidence",
+    "section4_root_cause",
+    "section5_risks_and_gaps",
+    "section6_agent4_actions",
+    "section7_final_verdict"
+  ],
+  "properties": {
+    "meta": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["title", "report_type", "report_version", "primary_consumers"],
+      "properties": {
+        "title": {
+          "const": "Yuansheng Trace Root Cause Diagnosis Report Lite"
+        },
+        "report_type": {
+          "const": "performance_root_cause"
+        },
+        "report_version": {
+          "const": "v1-lite"
+        },
+        "primary_consumers": {
+          "const": ["human_reviewer", "agent4_optimizer"]
+        }
+      }
+    },
+    "section1_basic_info": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "diagnosis_id",
+        "software",
+        "target_hardware",
+        "repository_url",
+        "test_branch",
+        "commit_hash",
+        "spec_baseline",
+        "overall_status",
+        "overall_confidence"
+      ],
+      "properties": {
+        "diagnosis_id": {
+          "$ref": "#/$defs/non_empty_string"
+        },
+        "software": {
+          "$ref": "#/$defs/non_empty_string"
+        },
+        "target_hardware": {
+          "$ref": "#/$defs/non_empty_string"
+        },
+        "repository_url": {
+          "$ref": "#/$defs/known_string_or_null"
+        },
+        "test_branch": {
+          "$ref": "#/$defs/known_string_or_null"
+        },
+        "commit_hash": {
+          "$ref": "#/$defs/known_string_or_null"
+        },
+        "spec_baseline": {
+          "oneOf": [
+            {
+              "type": "number",
+              "exclusiveMinimum": 0
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "overall_status": {
+          "enum": ["confirmed", "probable", "insufficient_evidence", "false_alarm"]
+        },
+        "overall_confidence": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Confidence in the currently available input evidence, excluding Pattern confidence."
+        }
+      }
+    },
+    "section2_summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "anomaly_conclusion",
+        "affected_target",
+        "most_likely_root_cause",
+        "recommend_to_agent4"
+      ],
+      "properties": {
+        "anomaly_conclusion": {
+          "$ref": "#/$defs/non_empty_string"
+        },
+        "affected_target": {
+          "$ref": "#/$defs/non_empty_string"
+        },
+        "most_likely_root_cause": {
+          "$ref": "#/$defs/known_string_or_null"
+        },
+        "recommend_to_agent4": {
+          "enum": ["no", "conditional"]
+        }
+      }
+    },
+    "section3_key_evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["3_1_metric_evidence", "3_2_hotspot_evidence", "3_3_code_knowledge_evidence"],
+      "properties": {
+        "3_1_metric_evidence": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/metric_evidence"
+          }
+        },
+        "3_2_hotspot_evidence": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/hotspot_evidence"
+          }
+        },
+        "3_3_code_knowledge_evidence": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["related_code_location", "related_knowledge", "evidence_explanation"],
+          "properties": {
+            "related_code_location": {
+              "$ref": "#/$defs/known_string_or_null"
+            },
+            "related_knowledge": {
+              "$ref": "#/$defs/known_string_or_null"
+            },
+            "evidence_explanation": {
+              "$ref": "#/$defs/known_string_or_null"
+            }
+          }
+        }
+      }
+    },
+    "section4_root_cause": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "most_likely_root_cause",
+        "root_cause_type",
+        "reasoning",
+        "alternative_explanations"
+      ],
+      "properties": {
+        "most_likely_root_cause": {
+          "$ref": "#/$defs/known_string_or_null"
+        },
+        "root_cause_type": {
+          "enum": ["code_path", "arch_gap", "config_mismatch", "infra_noise", "unknown"]
+        },
+        "reasoning": {
+          "$ref": "#/$defs/non_empty_string"
+        },
+        "alternative_explanations": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/non_empty_string"
+          }
+        }
+      }
+    },
+    "section5_risks_and_gaps": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["current_gaps", "risk_level", "needs_human_review", "human_review_focus"],
+      "properties": {
+        "current_gaps": {
+          "$ref": "#/$defs/gap_list"
+        },
+        "risk_level": {
+          "enum": ["high", "medium", "low"]
+        },
+        "needs_human_review": {
+          "const": true
+        },
+        "human_review_focus": {
+          "$ref": "#/$defs/non_empty_string"
+        }
+      }
+    },
+    "section6_agent4_actions": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "proceed_to_optimization",
+        "priority_location",
+        "recommended_first_action",
+        "recommended_verification",
+        "change_risk"
+      ],
+      "properties": {
+        "proceed_to_optimization": {
+          "enum": ["no", "conditional"]
+        },
+        "priority_location": {
+          "$ref": "#/$defs/known_string_or_null"
+        },
+        "recommended_first_action": {
+          "$ref": "#/$defs/non_empty_string"
+        },
+        "recommended_verification": {
+          "$ref": "#/$defs/non_empty_string"
+        },
+        "change_risk": {
+          "enum": ["high", "medium", "low"]
+        }
+      }
+    },
+    "section7_final_verdict": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["final_status", "allow_auto_forward_to_agent4", "block_reason"],
+      "properties": {
+        "final_status": {
+          "enum": [
+            "confirmed_root_cause",
+            "probable_root_cause",
+            "insufficient_evidence",
+            "false_alarm"
+          ]
+        },
+        "allow_auto_forward_to_agent4": {
+          "const": false
+        },
+        "block_reason": {
+          "$ref": "#/$defs/non_empty_string"
+        }
+      }
+    }
+  },
+  "$defs": {
+    "non_empty_string": {
+      "type": "string",
+      "minLength": 1
+    },
+    "known_string": {
+      "type": "string",
+      "minLength": 1,
+      "not": {
+        "enum": ["unknown", "UNKNOWN", "Unknown", "n/a", "N/A", "—"]
+      }
+    },
+    "known_string_or_null": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/known_string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "gap_code": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$"
+    },
+    "gap_list": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "contains": {
+        "const": "pattern_catalog_unavailable"
+      },
+      "minContains": 1,
+      "items": {
+        "$ref": "#/$defs/gap_code"
+      }
+    },
+    "require_repository_metadata_gap": {
+      "type": "object",
+      "properties": {
+        "section5_risks_and_gaps": {
+          "type": "object",
+          "properties": {
+            "current_gaps": {
+              "type": "array",
+              "contains": {
+                "const": "repository_metadata_unavailable"
+              }
+            }
+          }
+        }
+      }
+    },
+    "require_duration_gap": {
+      "type": "object",
+      "properties": {
+        "section5_risks_and_gaps": {
+          "type": "object",
+          "properties": {
+            "current_gaps": {
+              "type": "array",
+              "contains": {
+                "const": "duration_data_unavailable"
+              }
+            }
+          }
+        }
+      }
+    },
+    "require_aarch64_gap": {
+      "type": "object",
+      "properties": {
+        "section5_risks_and_gaps": {
+          "type": "object",
+          "properties": {
+            "current_gaps": {
+              "type": "array",
+              "contains": {
+                "const": "aarch64_baseline_unavailable"
+              }
+            }
+          }
+        }
+      }
+    },
+    "require_source_location_gap": {
+      "type": "object",
+      "properties": {
+        "section5_risks_and_gaps": {
+          "type": "object",
+          "properties": {
+            "current_gaps": {
+              "type": "array",
+              "contains": {
+                "const": "source_location_unavailable"
+              }
+            }
+          }
+        }
+      }
+    },
+    "require_code_knowledge_gap": {
+      "type": "object",
+      "properties": {
+        "section5_risks_and_gaps": {
+          "type": "object",
+          "properties": {
+            "current_gaps": {
+              "type": "array",
+              "contains": {
+                "const": "code_knowledge_unavailable"
+              }
+            }
+          }
+        }
+      }
+    },
+    "metric_evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["metric", "rv", "arm", "anomaly_note"],
+      "properties": {
+        "metric": {
+          "$ref": "#/$defs/non_empty_string"
+        },
+        "rv": {
+          "type": ["number", "null"]
+        },
+        "arm": {
+          "type": ["number", "null"]
+        },
+        "anomaly_note": {
+          "$ref": "#/$defs/non_empty_string"
+        }
+      },
+      "anyOf": [
+        {
+          "properties": {
+            "rv": {
+              "type": "number"
+            }
+          }
+        },
+        {
+          "properties": {
+            "arm": {
+              "type": "number"
+            }
+          }
+        }
+      ]
+    },
+    "hotspot_evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "hotspot_function",
+        "file_module",
+        "rvv_pattern",
+        "pattern_confidence",
+        "benefit_upperbound",
+        "note"
+      ],
+      "properties": {
+        "hotspot_function": {
+          "$ref": "#/$defs/non_empty_string"
+        },
+        "file_module": {
+          "$ref": "#/$defs/known_string_or_null"
+        },
+        "rvv_pattern": {
+          "const": null
+        },
+        "pattern_confidence": {
+          "const": null
+        },
+        "benefit_upperbound": {
+          "type": ["number", "null"],
+          "minimum": 0,
+          "maximum": 1
+        },
+        "note": {
+          "$ref": "#/$defs/non_empty_string"
+        }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "section1_basic_info": {
+            "type": "object",
+            "properties": {
+              "overall_status": {
+                "const": "confirmed"
+              }
+            }
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "section7_final_verdict": {
+            "type": "object",
+            "properties": {
+              "final_status": {
+                "const": "confirmed_root_cause"
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "section1_basic_info": {
+            "type": "object",
+            "properties": {
+              "overall_status": {
+                "const": "probable"
+              }
+            }
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "section7_final_verdict": {
+            "type": "object",
+            "properties": {
+              "final_status": {
+                "const": "probable_root_cause"
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "section1_basic_info": {
+            "type": "object",
+            "properties": {
+              "overall_status": {
+                "const": "insufficient_evidence"
+              }
+            }
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "section7_final_verdict": {
+            "type": "object",
+            "properties": {
+              "final_status": {
+                "const": "insufficient_evidence"
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "section1_basic_info": {
+            "type": "object",
+            "properties": {
+              "overall_status": {
+                "const": "false_alarm"
+              }
+            }
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "section7_final_verdict": {
+            "type": "object",
+            "properties": {
+              "final_status": {
+                "const": "false_alarm"
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "section1_basic_info": {
+            "type": "object",
+            "anyOf": [
+              {
+                "properties": {
+                  "repository_url": {
+                    "type": "null"
+                  }
+                }
+              },
+              {
+                "properties": {
+                  "test_branch": {
+                    "type": "null"
+                  }
+                }
+              },
+              {
+                "properties": {
+                  "commit_hash": {
+                    "type": "null"
+                  }
+                }
+              }
+            ]
+          }
+        }
+      },
+      "then": {
+        "$ref": "#/$defs/require_repository_metadata_gap"
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "section1_basic_info": {
+            "type": "object",
+            "properties": {
+              "spec_baseline": {
+                "type": "null"
+              }
+            }
+          }
+        }
+      },
+      "then": {
+        "$ref": "#/$defs/require_duration_gap"
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "section3_key_evidence": {
+            "type": "object",
+            "properties": {
+              "3_1_metric_evidence": {
+                "type": "array",
+                "contains": {
+                  "type": "object",
+                  "properties": {
+                    "arm": {
+                      "type": "null"
+                    }
+                  },
+                  "required": ["arm"]
+                }
+              }
+            }
+          }
+        }
+      },
+      "then": {
+        "$ref": "#/$defs/require_aarch64_gap"
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "section3_key_evidence": {
+            "type": "object",
+            "anyOf": [
+              {
+                "properties": {
+                  "3_2_hotspot_evidence": {
+                    "type": "array",
+                    "contains": {
+                      "type": "object",
+                      "properties": {
+                        "file_module": {
+                          "type": "null"
+                        }
+                      },
+                      "required": ["file_module"]
+                    }
+                  }
+                }
+              },
+              {
+                "properties": {
+                  "3_3_code_knowledge_evidence": {
+                    "type": "object",
+                    "properties": {
+                      "related_code_location": {
+                        "type": "null"
+                      }
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        }
+      },
+      "then": {
+        "$ref": "#/$defs/require_source_location_gap"
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "section3_key_evidence": {
+            "type": "object",
+            "properties": {
+              "3_3_code_knowledge_evidence": {
+                "type": "object",
+                "properties": {
+                  "related_knowledge": {
+                    "type": "null"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "then": {
+        "$ref": "#/$defs/require_code_knowledge_gap"
+      }
+    }
+  ]
+}

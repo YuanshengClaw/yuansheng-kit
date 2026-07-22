@@ -55,5 +55,14 @@
       "!!**/{.direnv,.git,.mypy_cache,.pytest_cache,.ruff_cache,.venv,coverage,dist,node_modules,result}",
       "!!**/result-*"
     ]
-  }
+  },
+
+  "overrides": [
+    {
+      "includes": ["tools/yuansheng-root-cause-blueprint/src/generated/validators.ts"],
+      "linter": {
+        "enabled": false
+      }
+    }
+  ]
 }

@@ -121,54 +121,6 @@
         "url": "https://github.com/NixOS/nixpkgs.git"
       }
     },
-    "pyproject": {
-      "inputs": {
-        "nixpkgs": [
-          "nixpkgs"
-        ]
-      },
-      "locked": {
-        "lastModified": 1784591072,
-        "narHash": "sha256-zP/WaDxrRu8GANZM61+V2LT/7ycEEdoyLWn7M6WzU7M=",
-        "ref": "master",
-        "rev": "e3b599ca2e7fcf93d4edf65d7f19bbf6491724f3",
-        "revCount": 558,
-        "type": "git",
-        "url": "https://github.com/pyproject-nix/pyproject.nix.git"
-      },
-      "original": {
-        "ref": "master",
-        "type": "git",
-        "url": "https://github.com/pyproject-nix/pyproject.nix.git"
-      }
-    },
-    "pyproject-overlay": {
-      "inputs": {
-        "nixpkgs": [
-          "nixpkgs"
-        ],
-        "pyproject-nix": [
-          "pyproject"
-        ],
-        "uv2nix": [
-          "uv"
-        ]
-      },
-      "locked": {
-        "lastModified": 1784580899,
-        "narHash": "sha256-65qjoshs2FUkt+3NzaVutCWjydUpiHElXLo+0SGuvPk=",
-        "ref": "master",
-        "rev": "5c4cc964cfb1e3cab9134dabe2d86bc4858f3867",
-        "revCount": 79,
-        "type": "git",
-        "url": "https://github.com/pyproject-nix/build-system-pkgs.git"
-      },
-      "original": {
-        "ref": "master",
-        "type": "git",
-        "url": "https://github.com/pyproject-nix/build-system-pkgs.git"
-      }
-    },
     "root": {
       "inputs": {
         "bun": "bun",
@@ -176,11 +128,8 @@
         "flake-parts": "flake-parts",
         "llm-agents": "llm-agents",
         "nixpkgs": "nixpkgs",
-        "pyproject": "pyproject",
-        "pyproject-overlay": "pyproject-overlay",
         "systems": "systems",
-        "treefmt": "treefmt",
-        "uv": "uv"
+        "treefmt": "treefmt"
       }
     },
     "systems": {
@@ -218,30 +167,6 @@
         "ref": "main",
         "type": "git",
         "url": "https://github.com/numtide/treefmt-nix.git"
-      }
-    },
-    "uv": {
-      "inputs": {
-        "nixpkgs": [
-          "nixpkgs"
-        ],
-        "pyproject-nix": [
-          "pyproject"
-        ]
-      },
-      "locked": {
-        "lastModified": 1784582828,
-        "narHash": "sha256-uPeuFNSYO429IEiud3iJKWIpN/xrH2CANj1uYNiDxqc=",
-        "ref": "master",
-        "rev": "49dac8d206c42175b069b7c6050ba27060a21106",
-        "revCount": 485,
-        "type": "git",
-        "url": "https://github.com/pyproject-nix/uv2nix.git"
-      },
-      "original": {
-        "ref": "master",
-        "type": "git",
-        "url": "https://github.com/pyproject-nix/uv2nix.git"
       }
     }
   },

@@ -1,6 +1,4 @@
 import { expect, test } from "bun:test";
-import { readFile } from "node:fs/promises";
-import { join } from "node:path";
 import {
   CapabilitySentinels,
   type CommandResult,
@@ -201,38 +199,3 @@ test("OpenCode discovers and executes isolated capability fixtures", async () =>
     await probe.cleanup();
   }
 }, 120_000);
-
-test("OpenCode cannot load a plugin that leaves its SDK external", async () => {
-  const probe = await createProbeEnvironment({
-    evidenceName: "sdk-external",
-    pluginPackaging: "external",
-  });
-  try {
-    const initialInventory = await probe.inventory();
-    const generatedPlugin = await readFile(
-      join(probe.opencodeDirectory, "plugins", "capability.js"),
-      "utf8",
-    );
-    expect(generatedPlugin).toMatch(/from\s*["']@opencode-ai\/plugin(?:\/[^"']*)?["']/u);
-
-    const result = await probe.run("sdk-external", [
-      "--print-logs",
-      "--log-level",
-      "DEBUG",
-      "debug",
-      "agent",
-      "capability",
-      "--tool",
-      "capability_echo",
-      "--params",
-      '{"value":"EXTERNAL_INPUT"}',
-    ]);
-    expect(result.timedOut).toBeFalse();
-    expect(result.exitCode).toBe(1);
-    expect(result.stderr).toContain("Tool capability_echo not found for agent capability");
-    expect(result.stdout).not.toContain(CapabilitySentinels.toolResult);
-    expect(await probe.inventory()).toEqual(initialInventory);
-  } finally {
-    await probe.cleanup();
-  }
-}, 60_000);

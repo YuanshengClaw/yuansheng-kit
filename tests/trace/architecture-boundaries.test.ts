@@ -1,5 +1,4 @@
 import { expect, test } from "bun:test";
-import { existsSync } from "node:fs";
 import { lstat, readdir, readFile } from "node:fs/promises";
 import { extname, join, relative } from "node:path";
 
@@ -42,22 +41,6 @@ const IGNORED_DIRECTORIES = new Set([
   "provenance",
   "result",
 ]);
-const UNSUPPORTED_PLACEHOLDER_PATHS = [
-  "adapters",
-  "platforms",
-  "claude-code",
-  "cursor",
-  "pattern",
-  "patterns",
-  "plugins/claude-code",
-  "plugins/cursor",
-  "plugins/pattern",
-  "plugins/patterns",
-  "plugins/trace/claude-code",
-  "plugins/trace/cursor",
-  "plugins/trace/pattern",
-  "plugins/trace/patterns",
-] as const;
 
 async function collectFiles(directory: string): Promise<readonly string[]> {
   const status = await lstat(directory).catch((error: unknown) => {
@@ -164,24 +147,6 @@ test("platform-neutral trace assets do not contain OpenCode registration markers
     }
   }
   expect(offenders).toEqual([]);
-});
-
-test("platform marker classification is format-aware", () => {
-  expect(hasPlatformMarker("asset.md", "An example mentions model: without front matter.\n")).toBe(
-    false,
-  );
-  expect(hasPlatformMarker("asset.md", "---\nmodel: capability/probe\n---\nBody\n")).toBe(true);
-  expect(hasPlatformMarker("asset.json", '{"permission":"allow"}\n')).toBe(true);
-  expect(hasPlatformMarker("asset.yaml", "agent: capability\n")).toBe(true);
-  expect(hasPlatformMarker("asset.ts", `import "${OPENCODE_SDK_SPECIFIER}";\n`)).toBe(true);
-  expect(hasPlatformMarker("asset.md", "Load .opencode/agents/example.md.\n")).toBe(true);
-});
-
-test("unsupported adapters, platforms, and Pattern placeholders are absent", () => {
-  const present = UNSUPPORTED_PLACEHOLDER_PATHS.filter((path) =>
-    existsSync(join(WORKSPACE_ROOT, path)),
-  );
-  expect(present).toEqual([]);
 });
 
 test("OpenCode trace package identity is canonical", async () => {

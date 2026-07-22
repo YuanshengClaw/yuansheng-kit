@@ -30,11 +30,8 @@
   "include": [
     "plugins/trace/opencode/src/**/*.ts",
     "plugins/trace/opencode/tests/**/*.ts",
-    "plugins/trace/tools/src/**/*.ts",
-    "plugins/trace/tools/tests/**/*.ts",
     "tests/**/*.ts",
-    "tools/plugin-builder/src/**/*.ts",
-    "tools/plugin-builder/tests/**/*.ts"
+    "tools/yuansheng-root-cause-blueprint/**/*.ts"
   ],
 
   "exclude": ["coverage", "dist", "node_modules"]

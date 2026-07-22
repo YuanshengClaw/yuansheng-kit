@@ -56,11 +56,6 @@ export interface ProbeEnvironment {
   startServer(): Promise<ProbeServer>;
 }
 
-export interface ProbeEnvironmentOptions {
-  readonly evidenceName?: string;
-  readonly pluginPackaging?: "bundled" | "external";
-}
-
 interface LocalProvider {
   readonly baseUrl: string;
   readonly requests: ProviderRequest[];
@@ -560,15 +555,11 @@ async function initializeGit(projectDirectory: string, homeDirectory: string): P
   }
 }
 
-async function buildPlugin(
-  opencodeDirectory: string,
-  packaging: "bundled" | "external",
-): Promise<void> {
+async function buildPlugin(opencodeDirectory: string): Promise<void> {
   const outputDirectory = join(opencodeDirectory, "plugins");
   await mkdir(outputDirectory, { recursive: true });
   const result = await Bun.build({
     entrypoints: [PLUGIN_SOURCE],
-    ...(packaging === "external" ? { external: ["@opencode-ai/plugin"] } : {}),
     format: "esm",
     minify: false,
     naming: "capability.js",
@@ -634,9 +625,7 @@ export function findRecord(
   return value.find((item): item is JsonRecord => isJsonRecord(item) && predicate(item));
 }
 
-export async function createProbeEnvironment(
-  options: ProbeEnvironmentOptions = {},
-): Promise<ProbeEnvironment> {
+export async function createProbeEnvironment(): Promise<ProbeEnvironment> {
   const executable = await realpath(toolPath());
   const root = await mkdtemp(join(tmpdir(), "yuansheng-opencode-capabilities-"));
   const homeDirectory = join(root, "home");
@@ -649,7 +638,7 @@ export async function createProbeEnvironment(
   const evidenceDirectory =
     configuredEvidenceRoot === undefined
       ? join(root, "evidence")
-      : join(configuredEvidenceRoot, options.evidenceName ?? "runtime");
+      : join(configuredEvidenceRoot, "runtime");
   const projectDirectory = join(root, "project");
   const globalConfigDirectory = join(xdgConfigDirectory, "opencode");
   const opencodeDirectory = join(projectDirectory, ".opencode");
@@ -675,7 +664,7 @@ export async function createProbeEnvironment(
     }
     await cp(FIXTURE_ROOT, projectDirectory, { recursive: true });
     await initializeGit(projectDirectory, homeDirectory);
-    await buildPlugin(opencodeDirectory, options.pluginPackaging ?? "bundled");
+    await buildPlugin(opencodeDirectory);
     await makeDirectoryReadOnly(opencodeDirectory);
     await makeDirectoryReadOnly(globalConfigDirectory);
     provider = startLocalProvider(evidenceDirectory, root);

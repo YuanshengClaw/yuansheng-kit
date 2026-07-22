@@ -1,0 +1,101 @@
+{
+  "meta": {
+    "title": "Yuansheng Trace Root Cause Diagnosis Report Lite",
+    "report_type": "performance_root_cause",
+    "report_version": "v1-lite",
+    "primary_consumers": ["human_reviewer", "agent4_optimizer"]
+  },
+  "section1_basic_info": {
+    "diagnosis_id": "diag-20260717-144258",
+    "software": "openjdk",
+    "target_hardware": "SOPHGO SG2044 (T-Head XuanTie C920v2, RVV 1.0, VLEN=128, OoO)",
+    "repository_url": "https://github.com/openjdk/jdk.git",
+    "test_branch": "master",
+    "commit_hash": "05c93a1dbb0d6f9c4da10d5a7d924a64408d40d2",
+    "spec_baseline": null,
+    "overall_status": "probable",
+    "overall_confidence": 0.55
+  },
+  "section2_summary": {
+    "anomaly_conclusion": "clear_page is the rank 001 HashMapBench hotspot. RISC-V IPC is 0.488, the cache miss rate is 100%, and no AArch64 comparison is available.",
+    "affected_target": "RV / HashMapBench",
+    "most_likely_root_cause": "The clear_page zeroing path is constrained by memory behavior and a serial address-update chain.",
+    "recommend_to_agent4": "conditional"
+  },
+  "section3_key_evidence": {
+    "3_1_metric_evidence": [
+      {
+        "metric": "duration_time (ns)",
+        "rv": 22338161173,
+        "arm": null,
+        "anomaly_note": "The RISC-V HashMapBench run took 22.34 seconds; no AArch64 comparison is available."
+      },
+      {
+        "metric": "IPC",
+        "rv": 0.488,
+        "arm": null,
+        "anomaly_note": "RISC-V IPC is 0.488; no AArch64 comparison is available."
+      },
+      {
+        "metric": "cache_miss_rate (%)",
+        "rv": 100,
+        "arm": null,
+        "anomaly_note": "The measured RISC-V cache miss rate is 100%; no AArch64 comparison is available."
+      },
+      {
+        "metric": "branch_miss_rate (%)",
+        "rv": 1.48,
+        "arm": null,
+        "anomaly_note": "The measured RISC-V branch miss rate is 1.48%; no AArch64 comparison is available."
+      }
+    ],
+    "3_2_hotspot_evidence": [
+      {
+        "hotspot_function": "clear_page",
+        "file_module": null,
+        "rvv_pattern": null,
+        "pattern_confidence": null,
+        "benefit_upperbound": null,
+        "note": "perf annotate ranks clear_page first and shows vector instructions, nop padding, and serial address updates in the zeroing loop. The input does not establish a source file or benefit upper bound."
+      }
+    ],
+    "3_3_code_knowledge_evidence": {
+      "related_code_location": null,
+      "related_knowledge": null,
+      "evidence_explanation": "The evidence identifies clear_page and its annotated instruction sequence, but it does not reliably map them to a source path, commit knowledge, or Pattern."
+    }
+  },
+  "section4_root_cause": {
+    "most_likely_root_cause": "The clear_page zeroing path is constrained by memory behavior and a serial address-update chain.",
+    "root_cause_type": "code_path",
+    "reasoning": "perf stat shows low IPC and a high cache miss rate, while perf annotate concentrates samples in the clear_page zeroing loop. This supports clear_page as the primary root-cause candidate, but the lack of cross-architecture data, a source location, and a Pattern catalog still requires human review.",
+    "alternative_explanations": [
+      "Memory bandwidth may be the only dominant factor, so instruction-level changes to clear_page might not materially change total runtime.",
+      "The current annotate sample count may be too small to quantify per-instruction costs reliably."
+    ]
+  },
+  "section5_risks_and_gaps": {
+    "current_gaps": [
+      "pattern_catalog_unavailable",
+      "duration_data_unavailable",
+      "aarch64_baseline_unavailable",
+      "source_location_unavailable",
+      "code_knowledge_unavailable"
+    ],
+    "risk_level": "medium",
+    "needs_human_review": true,
+    "human_review_focus": "Confirm the clear_page implementation and instruction semantics, collect a same-version AArch64 comparison and more annotate samples, and quantify the memory-bandwidth effect."
+  },
+  "section6_agent4_actions": {
+    "proceed_to_optimization": "conditional",
+    "priority_location": "clear_page",
+    "recommended_first_action": "Have a human map the evidenced clear_page hotspot to the current commit, then compare the feasibility of removing nop padding, breaking the serial address dependency, and using another zeroing method.",
+    "recommended_verification": "Repeat HashMapBench with identical input, build, and hardware settings, then compare IPC, cache miss rate, total runtime, and the clear_page annotate distribution.",
+    "change_risk": "medium"
+  },
+  "section7_final_verdict": {
+    "final_status": "probable_root_cause",
+    "allow_auto_forward_to_agent4": false,
+    "block_reason": "The Pattern catalog, AArch64 comparison, and traceable source location are unavailable, so human review is required."
+  }
+}

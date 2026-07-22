@@ -4,7 +4,6 @@
   "private": true,
   "type": "module",
   "dependencies": {
-    "@opencode-ai/plugin": "1.18.4",
-    "@yuansheng-kit/trace-tools": "workspace:*"
+    "@opencode-ai/plugin": "1.18.4"
   }
 }
