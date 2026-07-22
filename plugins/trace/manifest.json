@@ -96,7 +96,7 @@
       "source": {
         "kind": "tree",
         "path": "plugins/trace/tools/perf-data-validator",
-        "sha256": "5af0b51494b3d35a33ec096fe6ec335ed2d3b02f3e1a2e1ef09d83c5592ae8d7"
+        "sha256": "56f98277e4fa4e483ca74d05d7aa468851a48f7378cf6970545139b3f1c1494f"
       },
       "requires": []
     },
@@ -199,7 +199,7 @@
       "source": {
         "kind": "file",
         "path": "plugins/trace/agents/trace.md",
-        "sha256": "ba40e6954ff5b5736a1596ed1c5e26aa9579e39455fc70b8456adb3b278ba44b"
+        "sha256": "4b9239ca0ee6772a71a286d351a9acfe235c1a93af5308399a3809a3bab8fb82"
       },
       "requires": ["write-root-cause-blueprint-skill"]
     },
