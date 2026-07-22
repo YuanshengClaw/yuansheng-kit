@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import { lstat, readdir, readFile } from "node:fs/promises";
-import { extname, join, relative } from "node:path";
+import { dirname, extname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import ts from "typescript";
 
 const WORKSPACE_ROOT = join(import.meta.dir, "../..");
 const OPENCODE_API_PATTERN = /["']@opencode-ai\/plugin(?:\/[^"']*)?["']/u;
@@ -42,6 +43,11 @@ const IGNORED_DIRECTORIES = new Set([
   "result",
 ]);
 
+interface StaticModuleReference {
+  readonly specifier: string;
+  readonly typeOnly: boolean;
+}
+
 async function collectFiles(directory: string): Promise<readonly string[]> {
   const status = await lstat(directory).catch((error: unknown) => {
     if (typeof error === "object" && error !== null && "code" in error && error.code === "ENOENT") {
@@ -81,6 +87,97 @@ async function collectFiles(directory: string): Promise<readonly string[]> {
 
 function workspacePath(path: string): string {
   return relative(WORKSPACE_ROOT, path).replaceAll("\\", "/");
+}
+
+function importDeclarationIsTypeOnly(declaration: ts.ImportDeclaration): boolean {
+  const clause = declaration.importClause;
+  if (clause === undefined) {
+    return false;
+  }
+  if (clause.isTypeOnly) {
+    return true;
+  }
+  if (
+    clause.name !== undefined ||
+    clause.namedBindings === undefined ||
+    !ts.isNamedImports(clause.namedBindings)
+  ) {
+    return false;
+  }
+  return (
+    clause.namedBindings.elements.length > 0 &&
+    clause.namedBindings.elements.every((specifier) => specifier.isTypeOnly)
+  );
+}
+
+function exportDeclarationIsTypeOnly(declaration: ts.ExportDeclaration): boolean {
+  if (declaration.isTypeOnly) {
+    return true;
+  }
+  return (
+    declaration.exportClause !== undefined &&
+    ts.isNamedExports(declaration.exportClause) &&
+    declaration.exportClause.elements.length > 0 &&
+    declaration.exportClause.elements.every((specifier) => specifier.isTypeOnly)
+  );
+}
+
+function staticModuleReferences(path: string, source: string): readonly StaticModuleReference[] {
+  const sourceFile = ts.createSourceFile(
+    path,
+    source,
+    ts.ScriptTarget.Latest,
+    true,
+    ts.ScriptKind.TS,
+  );
+  const references: StaticModuleReference[] = [];
+  for (const statement of sourceFile.statements) {
+    if (ts.isImportDeclaration(statement) && ts.isStringLiteralLike(statement.moduleSpecifier)) {
+      references.push({
+        specifier: statement.moduleSpecifier.text,
+        typeOnly: importDeclarationIsTypeOnly(statement),
+      });
+      continue;
+    }
+    if (
+      ts.isExportDeclaration(statement) &&
+      statement.moduleSpecifier !== undefined &&
+      ts.isStringLiteralLike(statement.moduleSpecifier)
+    ) {
+      references.push({
+        specifier: statement.moduleSpecifier.text,
+        typeOnly: exportDeclarationIsTypeOnly(statement),
+      });
+      continue;
+    }
+    if (
+      ts.isImportEqualsDeclaration(statement) &&
+      ts.isExternalModuleReference(statement.moduleReference) &&
+      statement.moduleReference.expression !== undefined &&
+      ts.isStringLiteralLike(statement.moduleReference.expression)
+    ) {
+      references.push({
+        specifier: statement.moduleReference.expression.text,
+        typeOnly: statement.isTypeOnly,
+      });
+    }
+  }
+  return references;
+}
+
+function pathIsInside(directory: string, path: string): boolean {
+  const localPath = relative(directory, path);
+  return (
+    localPath === "" ||
+    (localPath !== ".." && !localPath.startsWith(`..${sep}`) && !isAbsolute(localPath))
+  );
+}
+
+function specifierResolvesInside(importer: string, specifier: string, directory: string): boolean {
+  if (!specifier.startsWith(".") && !isAbsolute(specifier)) {
+    return false;
+  }
+  return pathIsInside(directory, resolve(dirname(importer), specifier));
 }
 
 function hasPlatformMarker(path: string, contents: string): boolean {
@@ -164,4 +261,70 @@ test("OpenCode trace package identity is canonical", async () => {
       },
     },
   });
+});
+
+test("plugin builder is a root-lock workspace and remains platform-neutral", async () => {
+  const rootPackage: unknown = Bun.JSONC.parse(
+    await readFile(join(WORKSPACE_ROOT, "package.json"), "utf8"),
+  );
+  const bunLock: unknown = Bun.JSONC.parse(
+    await readFile(join(WORKSPACE_ROOT, "bun.lock"), "utf8"),
+  );
+  expect(rootPackage).toMatchObject({
+    workspaces: expect.arrayContaining(["tools/plugin-builder"]),
+  });
+  expect(bunLock).toMatchObject({
+    workspaces: {
+      "tools/plugin-builder": {
+        name: "@yuansheng-kit/plugin-builder",
+      },
+    },
+  });
+
+  const repositoryFiles = await collectFiles(WORKSPACE_ROOT);
+  const bunLocks = repositoryFiles
+    .map(workspacePath)
+    .filter((path) => /(?:^|\/)bun\.lockb?$/u.test(path))
+    .sort();
+  expect(bunLocks).toEqual(["bun.lock"]);
+
+  const builderRoot = join(WORKSPACE_ROOT, "tools/plugin-builder");
+  const traceRoot = join(WORKSPACE_ROOT, "plugins/trace");
+  const builderSources = (await collectFiles(join(builderRoot, "src"))).filter((path) =>
+    OPENCODE_SOURCE_EXTENSIONS.has(extname(path)),
+  );
+  const forbiddenImports: string[] = [];
+  for (const path of builderSources) {
+    const references = staticModuleReferences(path, await readFile(path, "utf8"));
+    for (const reference of references) {
+      const importsOpenCodeSdk = /^@opencode-ai\/plugin(?:\/|$)/u.test(reference.specifier);
+      const importsTracePackage =
+        /^@yuansheng-kit\/opencode-ys-trace(?:\/|$)/u.test(reference.specifier) ||
+        /^(?:plugins\/trace)(?:\/|$)/u.test(reference.specifier) ||
+        specifierResolvesInside(path, reference.specifier, traceRoot);
+      if (importsOpenCodeSdk || importsTracePackage) {
+        forbiddenImports.push(`${workspacePath(path)} -> ${reference.specifier}`);
+      }
+    }
+  }
+  expect(forbiddenImports.sort()).toEqual([]);
+});
+
+test("OpenCode platform handler imports plugin-builder contracts only as types", async () => {
+  const handlerPath = join(WORKSPACE_ROOT, "plugins/trace/opencode/src/platform-handler.ts");
+  const builderRoot = join(WORKSPACE_ROOT, "tools/plugin-builder");
+  const references = staticModuleReferences(handlerPath, await readFile(handlerPath, "utf8"));
+  const builderImports = references.filter(
+    (reference) =>
+      /^@yuansheng-kit\/plugin-builder(?:\/|$)/u.test(reference.specifier) ||
+      specifierResolvesInside(handlerPath, reference.specifier, builderRoot),
+  );
+
+  expect(builderImports.length).toBeGreaterThan(0);
+  expect(
+    builderImports
+      .filter((reference) => !reference.typeOnly)
+      .map((reference) => reference.specifier)
+      .sort(),
+  ).toEqual([]);
 });

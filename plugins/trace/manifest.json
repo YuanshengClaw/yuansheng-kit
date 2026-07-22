@@ -1,0 +1,327 @@
+{
+  "$schema": "../../tools/plugin-builder/schema/plugin-manifest-v1.schema.json",
+  "manifest_version": 1,
+  "plugin": {
+    "id": "trace",
+    "display_name": "Yuansheng Trace"
+  },
+  "resources": [
+    {
+      "id": "artifact-transaction",
+      "kind": "workflow",
+      "logical_path": "workflows/artifact-transaction.ts",
+      "source": {
+        "kind": "file",
+        "path": "plugins/trace/workflows/artifact-transaction.ts",
+        "sha256": "40186ff94604340deb629b5ee037d99c91cf9ad2c4e5d5cdf5bedebbd5259696"
+      },
+      "requires": ["blueprint-pipeline", "root-cause-canonical-json", "trace-workflow"]
+    },
+    {
+      "id": "blueprint-pipeline",
+      "kind": "workflow",
+      "logical_path": "workflows/blueprint-pipeline.ts",
+      "source": {
+        "kind": "file",
+        "path": "plugins/trace/workflows/blueprint-pipeline.ts",
+        "sha256": "82b3a514a1138539b32c414acdb8dabc3481455639f54962e09a80335ea373fe"
+      },
+      "requires": [
+        "hardware-profile",
+        "perf-data-validation-report",
+        "root-cause-blueprint-type",
+        "root-cause-blueprint-validator",
+        "root-cause-canonical-json",
+        "root-cause-semantic-rules",
+        "root-cause-strict-json",
+        "trace-workflow"
+      ]
+    },
+    {
+      "id": "hardware-profile",
+      "kind": "workflow",
+      "logical_path": "workflows/hardware-profile.ts",
+      "source": {
+        "kind": "file",
+        "path": "plugins/trace/workflows/hardware-profile.ts",
+        "sha256": "cdb5f6b46270bd61bee1cd4ecc82040020c589286332c7c156f91cbe3678cce5"
+      },
+      "requires": ["root-cause-canonical-json", "root-cause-strict-json"]
+    },
+    {
+      "id": "opencode-package",
+      "kind": "platform-package",
+      "logical_path": "opencode/package.json",
+      "source": {
+        "kind": "file",
+        "path": "plugins/trace/opencode/package.json",
+        "sha256": "59759a6b95bcffc20f22d60ed1aff6c0dd6ba8372b713274a215e295d8ff3836"
+      },
+      "requires": []
+    },
+    {
+      "id": "opencode-platform-handler",
+      "kind": "platform-handler",
+      "logical_path": "opencode/src/platform-handler.ts",
+      "source": {
+        "kind": "file",
+        "path": "plugins/trace/opencode/src/platform-handler.ts",
+        "sha256": "7bceabc4c04fba6e48d5c7b9a64b9e7f17f6006b002b6861e3198b717f4af677"
+      },
+      "requires": [
+        "artifact-transaction",
+        "blueprint-pipeline",
+        "hardware-profile",
+        "opencode-package",
+        "perf-data-validation-report",
+        "perf-data-validation-report-schema",
+        "root-cause-blueprint-type",
+        "root-cause-blueprint-validator",
+        "root-cause-canonical-json",
+        "root-cause-semantic-rules",
+        "root-cause-strict-json",
+        "sg2044-hardware-profile",
+        "trace-agent",
+        "trace-command",
+        "trace-workflow",
+        "write-root-cause-blueprint-skill"
+      ]
+    },
+    {
+      "id": "perf-data-validation-report",
+      "kind": "workflow",
+      "logical_path": "workflows/perf-data-validation-report.ts",
+      "source": {
+        "kind": "file",
+        "path": "plugins/trace/workflows/perf-data-validation-report.ts",
+        "sha256": "f4f151b7dc0cfd00a6355b758a4b6bb59f2b54621c368b13571e72236e14f931"
+      },
+      "requires": [
+        "perf-data-validation-report-schema",
+        "root-cause-canonical-json",
+        "root-cause-strict-json"
+      ]
+    },
+    {
+      "id": "perf-data-validation-report-schema",
+      "kind": "workflow-schema",
+      "logical_path": "workflows/perf-data-validation-report-v1.schema.json",
+      "source": {
+        "kind": "file",
+        "path": "plugins/trace/workflows/perf-data-validation-report-v1.schema.json",
+        "sha256": "6259233dca245f8b153e4abdb0a916e02ccb32f864f2a18874c5d20e4f36a0bb"
+      },
+      "requires": []
+    },
+    {
+      "id": "root-cause-blueprint-type",
+      "kind": "runtime-library",
+      "logical_path": "runtime/root-cause-blueprint/generated/yuansheng-root-cause-blueprint-v1-lite.ts",
+      "source": {
+        "kind": "file",
+        "path": "tools/yuansheng-root-cause-blueprint/src/generated/types/yuansheng-root-cause-blueprint-v1-lite.ts",
+        "sha256": "185579dfb2b32c705d9aa6dcff2357b6b374ea9fc7753ea048078b5cdb698752"
+      },
+      "requires": []
+    },
+    {
+      "id": "root-cause-blueprint-validator",
+      "kind": "runtime-library",
+      "logical_path": "runtime/root-cause-blueprint/generated/validators.ts",
+      "source": {
+        "kind": "file",
+        "path": "tools/yuansheng-root-cause-blueprint/src/generated/validators.ts",
+        "sha256": "85a8490c53204c4bed9609ea6512098e1016366e9df7adec30a74c4f3dcdfc90"
+      },
+      "requires": []
+    },
+    {
+      "id": "root-cause-canonical-json",
+      "kind": "runtime-library",
+      "logical_path": "runtime/root-cause-blueprint/canonical-json.ts",
+      "source": {
+        "kind": "file",
+        "path": "tools/yuansheng-root-cause-blueprint/src/canonical-json.ts",
+        "sha256": "8b003dfd7d8596b7aac7ecdaee80f9adfb876c40639975c542a79a0139ae9c24"
+      },
+      "requires": ["root-cause-strict-json"]
+    },
+    {
+      "id": "root-cause-semantic-rules",
+      "kind": "runtime-library",
+      "logical_path": "runtime/root-cause-blueprint/semantic-rules.ts",
+      "source": {
+        "kind": "file",
+        "path": "tools/yuansheng-root-cause-blueprint/src/semantic-rules.ts",
+        "sha256": "e21ca34f9a9d7981135e05576a8f0f8f038ceef6e5956967e73d0ccce5193780"
+      },
+      "requires": ["root-cause-blueprint-type"]
+    },
+    {
+      "id": "root-cause-strict-json",
+      "kind": "runtime-library",
+      "logical_path": "runtime/root-cause-blueprint/strict-json.ts",
+      "source": {
+        "kind": "file",
+        "path": "tools/yuansheng-root-cause-blueprint/src/strict-json.ts",
+        "sha256": "84b7443068d4937a4a836c8bf5d07437668f1b10f49ff4b5771431f52d474d09"
+      },
+      "requires": []
+    },
+    {
+      "id": "sg2044-hardware-profile",
+      "kind": "hardware-profile",
+      "logical_path": "resources/hardware-profiles/sg2044.json",
+      "source": {
+        "kind": "file",
+        "path": "plugins/trace/resources/hardware-profiles/sg2044.json",
+        "sha256": "e55c865f09c0e0ede3248afa6a1a3dc9b8b3187fd3052eb0691633951419029f"
+      },
+      "requires": []
+    },
+    {
+      "id": "trace-agent",
+      "kind": "agent",
+      "logical_path": "agents/trace.md",
+      "source": {
+        "kind": "file",
+        "path": "plugins/trace/agents/trace.md",
+        "sha256": "e763e59e87dc3c2b235b7a8d477fc24d2dba61c5e951603c18e6c528e9212ca5"
+      },
+      "requires": ["write-root-cause-blueprint-skill"]
+    },
+    {
+      "id": "trace-command",
+      "kind": "command",
+      "logical_path": "commands/trace.md",
+      "source": {
+        "kind": "file",
+        "path": "plugins/trace/commands/trace.md",
+        "sha256": "a851004b82bbcc4957e73f5271bdab02899b0ad649ad2c4615ae7ed57e4ee9e8"
+      },
+      "requires": ["trace-agent", "trace-workflow"]
+    },
+    {
+      "id": "trace-workflow",
+      "kind": "workflow",
+      "logical_path": "workflows/trace-workflow.ts",
+      "source": {
+        "kind": "file",
+        "path": "plugins/trace/workflows/trace-workflow.ts",
+        "sha256": "ce10786cae5308cac6d9beb19014fb623c128de686447abcd544107bac21f0f5"
+      },
+      "requires": ["hardware-profile", "perf-data-validation-report", "root-cause-canonical-json"]
+    },
+    {
+      "id": "write-root-cause-blueprint-skill",
+      "kind": "skill",
+      "logical_path": "skills/write-root-cause-blueprint",
+      "source": {
+        "kind": "tree",
+        "path": "plugins/trace/skills/write-root-cause-blueprint",
+        "sha256": "aeb60671ad1c942d18ce07191d60a3c7632025a548c5d9398d07d259e6db9d16"
+      },
+      "requires": []
+    }
+  ],
+  "platforms": [
+    {
+      "id": "opencode",
+      "artifact_name": "@yuansheng-kit/opencode-ys-trace",
+      "roots": ["opencode-platform-handler"],
+      "handler": {
+        "api_version": 1,
+        "resource": "opencode-platform-handler",
+        "export": "openCodePlatformHandler"
+      },
+      "configuration": {
+        "agent": {
+          "id": "ys-trace",
+          "resource": "trace-agent",
+          "destination": ".opencode/agents/ys-trace.md",
+          "description": "Read-only RISC-V performance root-cause analysis with Yuansheng Trace.",
+          "mode": "primary"
+        },
+        "command": {
+          "id": "ys-trace",
+          "resource": "trace-command",
+          "destination": ".opencode/commands/ys-trace.md",
+          "description": "Start a Yuansheng Trace root-cause analysis run.",
+          "agent": "ys-trace",
+          "argument_placeholder": "$ARGUMENTS"
+        },
+        "copies": [
+          {
+            "resource": "write-root-cause-blueprint-skill",
+            "destination": ".opencode/skills/write-root-cause-blueprint"
+          },
+          {
+            "resource": "sg2044-hardware-profile",
+            "destination": ".opencode/yuansheng/resources/hardware-profiles/sg2044.json"
+          },
+          {
+            "resource": "artifact-transaction",
+            "destination": ".opencode/yuansheng/sources/plugins/trace/workflows/artifact-transaction.ts"
+          },
+          {
+            "resource": "blueprint-pipeline",
+            "destination": ".opencode/yuansheng/sources/plugins/trace/workflows/blueprint-pipeline.ts"
+          },
+          {
+            "resource": "hardware-profile",
+            "destination": ".opencode/yuansheng/sources/plugins/trace/workflows/hardware-profile.ts"
+          },
+          {
+            "resource": "perf-data-validation-report",
+            "destination": ".opencode/yuansheng/sources/plugins/trace/workflows/perf-data-validation-report.ts"
+          },
+          {
+            "resource": "perf-data-validation-report-schema",
+            "destination": ".opencode/yuansheng/sources/plugins/trace/workflows/perf-data-validation-report-v1.schema.json"
+          },
+          {
+            "resource": "trace-workflow",
+            "destination": ".opencode/yuansheng/sources/plugins/trace/workflows/trace-workflow.ts"
+          },
+          {
+            "resource": "root-cause-canonical-json",
+            "destination": ".opencode/yuansheng/sources/tools/yuansheng-root-cause-blueprint/src/canonical-json.ts"
+          },
+          {
+            "resource": "root-cause-strict-json",
+            "destination": ".opencode/yuansheng/sources/tools/yuansheng-root-cause-blueprint/src/strict-json.ts"
+          },
+          {
+            "resource": "root-cause-semantic-rules",
+            "destination": ".opencode/yuansheng/sources/tools/yuansheng-root-cause-blueprint/src/semantic-rules.ts"
+          },
+          {
+            "resource": "root-cause-blueprint-validator",
+            "destination": ".opencode/yuansheng/sources/tools/yuansheng-root-cause-blueprint/src/generated/validators.ts"
+          },
+          {
+            "resource": "root-cause-blueprint-type",
+            "destination": ".opencode/yuansheng/sources/tools/yuansheng-root-cause-blueprint/src/generated/types/yuansheng-root-cause-blueprint-v1-lite.ts"
+          },
+          {
+            "resource": "opencode-package",
+            "destination": "package.json"
+          }
+        ],
+        "permissions": {
+          "bash": "deny",
+          "edit": "deny",
+          "read": "deny",
+          "skill": "allow",
+          "webfetch": "deny",
+          "websearch": "deny",
+          "write": "deny"
+        },
+        "artifact_root": {
+          "default_relative_path": ".opencode/yuansheng/blueprint",
+          "requires_resolved_absolute_path": true
+        }
+      }
+    }
+  ]
+}

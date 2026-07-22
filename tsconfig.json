@@ -32,6 +32,7 @@
     "plugins/trace/opencode/src/**/*.ts",
     "plugins/trace/opencode/tests/**/*.ts",
     "tests/**/*.ts",
+    "tools/plugin-builder/**/*.ts",
     "tools/yuansheng-root-cause-blueprint/**/*.ts"
   ],
 
