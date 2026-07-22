@@ -53,6 +53,16 @@ For an SSH location:
 4. Stop and request explicit confirmation of that exact inventory before any
    transfer. Do not treat approval of the plan or inventory command as transfer
    confirmation.
+5. Only after the user confirms that exact inventory, call
+   `ys_trace_transfer_remote_input` with the unchanged `run_id`, `plan_sha256`,
+   and `inventory_sha256` returned by the workflow.
+6. Let the runtime perform the fixed remote stage, SFTP download, post-inventory
+   verification, local raw-path reconstruction, and remote cleanup. Do not
+   reproduce or alter these operations. The result is a verified local tree; use
+   its returned local root for the validation handoff in the next product step.
+
+Do not classify test cases, perf data, annotate data, or other input semantics
+before the validator has accepted the verified local tree.
 
 Never run `ssh`, `sftp`, `scp`, or `rsync` through Bash. Never run Nix, Python,
 the validator, OpenCode, an LLM, or project source on the remote host. Use only

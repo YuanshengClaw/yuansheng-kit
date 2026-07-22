@@ -23,4 +23,10 @@ command. Never infer an SSH alias or transport limit. The adapter must pass an
 already-resolved absolute artifact root to the platform-neutral workflow, which
 presents and binds that root in the execution plan. For SSH input, the adapter
 first presents and binds the complete transport plan, then produces a read-only
-inventory and stops for a separate, explicit transfer confirmation.
+inventory and stops for the user's separate, explicit transfer confirmation.
+After that confirmation, call `ys_trace_transfer_remote_input` with the
+unchanged `run_id`, `plan_sha256`, and `inventory_sha256`. The runtime alone
+performs the fixed remote stage, SFTP download, post-inventory verification,
+local raw-path reconstruction, and remote cleanup. It returns the verified
+local-tree root for the next product step's validation handoff. Never run SSH or
+SFTP through Bash, and do not classify input semantics before validation.

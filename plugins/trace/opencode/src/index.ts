@@ -16,10 +16,15 @@ import { type Plugin, tool } from "@opencode-ai/plugin";
 
 import { canonicalizeJson } from "../../../../tools/yuansheng-root-cause-blueprint/src/canonical-json";
 import {
+  createSshRemoteCleanupLease,
   createSshTransportPlan,
   createSshTransportState,
+  parseSshCleanup,
   parseSshInventory,
+  parseSshStage,
   SSH_TRANSPORT_PROTOCOL_MARKERS,
+  type SshCleanupStatus,
+  type SshStageRejection,
   SshTransportError,
   type SshTransportLimits,
   type SshTransportState,
@@ -33,9 +38,21 @@ import {
   transitionTraceWorkflow,
 } from "../../workflows/trace-workflow";
 import {
+  cleanupLocalSshSnapshot,
+  createLocalSshSnapshot,
+  LocalSshSnapshotError,
+  type LocalSshSnapshotHandle,
+  materializeLocalSshSnapshot,
+} from "./local-ssh-snapshot";
+import {
   discoverOpenSshExecutables,
   OpenSshRuntimeError,
+  runApprovedSftpDownload,
+  runApprovedSshCleanup,
   runApprovedSshOperation,
+  runApprovedSshPostInventory,
+  runApprovedSshPostInventoryCleanup,
+  runApprovedSshStage,
 } from "./openssh-runtime";
 
 const DEFAULT_ARTIFACT_ROOT = ".opencode/yuansheng/blueprint";
@@ -97,9 +114,29 @@ interface RunRecord {
 
 interface PendingRemoteRun {
   readonly artifactRoot: string;
+  readonly cleanupSafety: RemoteCleanupSafety;
   inventoryInFlight: boolean;
+  readonly lifecycleAbort: AbortController;
+  readonly localResidualPaths: Set<string>;
+  localSnapshot?: LocalSshSnapshotHandle;
+  operation?: RemoteOperation;
   readonly software: string;
   transport: SshTransportState;
+  transferInFlight: boolean;
+}
+
+interface RemoteCleanupSafety {
+  local: boolean;
+  remoteInventory: boolean;
+  remoteStage: boolean;
+}
+
+interface RemoteOperation {
+  readonly controller: AbortController;
+  readonly detach: () => void;
+  readonly done: Promise<void>;
+  phase: "awaiting_authorization" | "running";
+  readonly resolveDone: () => void;
 }
 
 interface BoundReportDirectory {
@@ -743,10 +780,192 @@ async function cleanupReport(run: RunRecord): Promise<boolean> {
   }
 }
 
+function remoteCleanupKnown(run: PendingRemoteRun): boolean {
+  return (
+    (run.transport.phase === "staged" ||
+      run.transport.phase === "failed" ||
+      run.transport.phase === "cleaned") &&
+    run.transport.cleanup.remote_temp_removed
+  );
+}
+
+async function cleanupRemoteSnapshot(run: PendingRemoteRun): Promise<boolean> {
+  if (remoteCleanupKnown(run)) {
+    return true;
+  }
+  if (!("cleanup_lease" in run.transport) || run.transport.cleanup_lease === undefined) {
+    return true;
+  }
+  if (!run.cleanupSafety.remoteStage) {
+    return false;
+  }
+  try {
+    const response = await runApprovedSshCleanup(run.transport, new AbortController().signal);
+    return parseSshCleanup(response.stdout, {
+      cleanupLease: run.transport.cleanup_lease,
+      plan: run.transport.plan,
+    }).remote_temp_removed;
+  } catch (error) {
+    if (error instanceof OpenSshRuntimeError && !error.cleanupSafe) {
+      run.cleanupSafety.remoteStage = false;
+    }
+    return false;
+  }
+}
+
+async function cleanupRemoteInventorySnapshot(run: PendingRemoteRun): Promise<boolean> {
+  const inventoryTemp = run.transport.plan.plan.remote_inventory_temp;
+  if (
+    run.transport.phase !== "failed" ||
+    !run.transport.cleanup.residual_paths.includes(inventoryTemp)
+  ) {
+    return true;
+  }
+  if (!run.cleanupSafety.remoteInventory) {
+    return false;
+  }
+  try {
+    const response = await runApprovedSshPostInventoryCleanup(
+      run.transport,
+      new AbortController().signal,
+    );
+    const expected = UTF8_ENCODER.encode(`${SSH_TRANSPORT_PROTOCOL_MARKERS.inventoryCleanup}\n`);
+    return bytesEqual(response.stdout, expected);
+  } catch (error) {
+    if (error instanceof OpenSshRuntimeError && !error.cleanupSafe) {
+      run.cleanupSafety.remoteInventory = false;
+    }
+    return false;
+  }
+}
+
+async function cleanupLocalSnapshot(
+  run: PendingRemoteRun,
+): Promise<Readonly<{ removed: boolean; residualPaths: readonly string[] }>> {
+  if (run.localSnapshot === undefined) {
+    const residualPaths = [...run.localResidualPaths];
+    return { removed: residualPaths.length === 0, residualPaths };
+  }
+  if (!run.cleanupSafety.local) {
+    return {
+      removed: false,
+      residualPaths: [run.localSnapshot.local_staging_root, ...run.localResidualPaths],
+    };
+  }
+  try {
+    const cleanup = await cleanupLocalSshSnapshot(run.localSnapshot);
+    if (cleanup.local_staging_removed) {
+      delete run.localSnapshot;
+    }
+    const residualPaths = [...cleanup.residual_paths, ...run.localResidualPaths];
+    return {
+      removed: cleanup.local_staging_removed && residualPaths.length === 0,
+      residualPaths: [...new Set(residualPaths)],
+    };
+  } catch {
+    return {
+      removed: false,
+      residualPaths: [run.transport.plan.plan.local_staging_root, ...run.localResidualPaths],
+    };
+  }
+}
+
+function cleanupStatus(input: {
+  readonly localRemoved: boolean;
+  readonly localResidualPaths: readonly string[];
+  readonly remoteRemoved: boolean;
+  readonly remoteResidualPaths?: readonly string[];
+  readonly run: PendingRemoteRun;
+}): SshCleanupStatus {
+  const residualPaths = [...input.localResidualPaths, ...(input.remoteResidualPaths ?? [])];
+  if (!input.remoteRemoved) {
+    const remotePath =
+      "cleanup_lease" in input.run.transport && input.run.transport.cleanup_lease !== undefined
+        ? input.run.transport.cleanup_lease.remote_temp
+        : input.run.transport.plan.plan.remote_temp;
+    residualPaths.push(remotePath);
+  }
+  return {
+    local_staging_removed: input.localRemoved,
+    remote_temp_removed: input.remoteRemoved,
+    residual_paths: [...new Set(residualPaths)],
+  };
+}
+
+function rejectedStageFromRuntimeError(
+  error: OpenSshRuntimeError,
+  state: Extract<SshTransportState, { phase: "transferring" }>,
+): SshStageRejection {
+  const cleanupLease = createSshRemoteCleanupLease(state.plan, state.inventory.inventory_sha256);
+  try {
+    if (error.stdout !== undefined && error.stdout.byteLength > 0) {
+      const parsed = parseSshStage(error.stdout, state.plan, state.inventory.inventory_sha256);
+      if (!parsed.ok) {
+        return parsed;
+      }
+    }
+  } catch {
+    // The plan-bound path still provides an exact cleanup lease.
+  }
+  return {
+    cleanup_lease: cleanupLease,
+    error_code: "snapshot_mismatch",
+    error_message: "The remote stage process did not complete successfully",
+    ok: false,
+  };
+}
+
+function beginRemoteOperation(
+  run: PendingRemoteRun,
+  callerSignal: AbortSignal,
+  phase: RemoteOperation["phase"],
+): RemoteOperation {
+  if (run.operation !== undefined) {
+    fail("invalid_run", "The remote trace run already has an active operation");
+  }
+  const controller = new AbortController();
+  const abort = () => controller.abort();
+  const signals = [callerSignal, run.lifecycleAbort.signal];
+  for (const signal of signals) {
+    if (signal.aborted) {
+      abort();
+    } else {
+      signal.addEventListener("abort", abort, { once: true });
+    }
+  }
+  let resolveDone = (): void => undefined;
+  const done = new Promise<void>((resolveOperation) => {
+    resolveDone = resolveOperation;
+  });
+  const operation: RemoteOperation = {
+    controller,
+    detach: () => {
+      for (const signal of signals) {
+        signal.removeEventListener("abort", abort);
+      }
+    },
+    done,
+    phase,
+    resolveDone,
+  };
+  run.operation = operation;
+  return operation;
+}
+
+function finishRemoteOperation(run: PendingRemoteRun, operation: RemoteOperation): void {
+  if (run.operation !== operation) {
+    return;
+  }
+  delete run.operation;
+  operation.detach();
+  operation.resolveDone();
+}
+
 export const YuanshengTracePlugin: Plugin = async () => {
   const sessions = new Map<string, Map<string, RunRecord>>();
   const remoteSessions = new Map<string, Map<string, PendingRemoteRun>>();
   const activeRunIds = new Set<string>();
+  let disposing = false;
 
   function createRunId(): string {
     let runId: string;
@@ -795,11 +1014,62 @@ export const YuanshengTracePlugin: Plugin = async () => {
 
   return {
     async dispose() {
+      disposing = true;
       const runs = [...sessions.values()].flatMap((sessionRuns) => [...sessionRuns.values()]);
+      const remoteRuns = [...remoteSessions.values()].flatMap((sessionRuns) => [
+        ...sessionRuns.values(),
+      ]);
+      for (const run of remoteRuns) {
+        run.lifecycleAbort.abort();
+      }
+      await Promise.allSettled(
+        remoteRuns.flatMap((run) =>
+          run.operation?.phase === "running" ? [run.operation.done] : [],
+        ),
+      );
+      const residualPaths: string[] = [];
+      const reportCleanup = await Promise.all(
+        runs.map(async (run) => ({ removed: await cleanupReport(run), run })),
+      );
+      for (const result of reportCleanup) {
+        if (!result.removed) {
+          residualPaths.push(result.run.reportDirectory);
+        }
+      }
+      const remoteCleanup = await Promise.all(
+        remoteRuns.map(async (run) => ({
+          inventoryRemoved: await cleanupRemoteInventorySnapshot(run),
+          local: await cleanupLocalSnapshot(run),
+          remoteRemoved: await cleanupRemoteSnapshot(run),
+          run,
+        })),
+      );
+      for (const result of remoteCleanup) {
+        residualPaths.push(...result.local.residualPaths);
+        if (!result.inventoryRemoved) {
+          residualPaths.push(result.run.transport.plan.plan.remote_inventory_temp);
+        }
+        if (!result.remoteRemoved) {
+          residualPaths.push(
+            "cleanup_lease" in result.run.transport &&
+              result.run.transport.cleanup_lease !== undefined
+              ? result.run.transport.cleanup_lease.remote_temp
+              : result.run.transport.plan.plan.remote_temp,
+          );
+        }
+      }
+      const uniqueResidualPaths = [...new Set(residualPaths)];
+      if (uniqueResidualPaths.length > 0) {
+        const bounded = uniqueResidualPaths.slice(0, 32);
+        const suffix = uniqueResidualPaths.length > bounded.length ? ", ..." : "";
+        throw new TraceRuntimeError(
+          "remote_transport_failed",
+          `Yuansheng Trace disposal left cleanup residuals: ${bounded.join(", ")}${suffix}`,
+        );
+      }
       sessions.clear();
       remoteSessions.clear();
       activeRunIds.clear();
-      await Promise.all(runs.map((run) => cleanupReport(run)));
     },
     tool: {
       ys_trace_inventory_remote_input: tool({
@@ -810,6 +1080,9 @@ export const YuanshengTracePlugin: Plugin = async () => {
           run_id: tool.schema.string().regex(RUN_ID),
         },
         async execute({ plan_sha256, run_id }, context) {
+          if (disposing) {
+            fail("invalid_run", "Yuansheng Trace is disposing this plugin instance");
+          }
           const run = remoteSessions.get(context.sessionID)?.get(run_id);
           if (run === undefined) {
             fail("invalid_run", "The remote trace run is unknown in this OpenCode session");
@@ -823,10 +1096,15 @@ export const YuanshengTracePlugin: Plugin = async () => {
           if (run.inventoryInFlight) {
             fail("invalid_run", "The remote trace run is already collecting its inventory");
           }
+          const operation = beginRemoteOperation(run, context.abort, "running");
           run.inventoryInFlight = true;
           let inventoryAttempted = false;
           try {
-            const probe = await runApprovedSshOperation(run.transport, "probe", context.abort);
+            const probe = await runApprovedSshOperation(
+              run.transport,
+              "probe",
+              operation.controller.signal,
+            );
             const expectedProbe = UTF8_ENCODER.encode(`${SSH_TRANSPORT_PROTOCOL_MARKERS.probe}\n`);
             if (!bytesEqual(probe.stdout, expectedProbe)) {
               throw new TraceRuntimeError(
@@ -838,7 +1116,7 @@ export const YuanshengTracePlugin: Plugin = async () => {
             const response = await runApprovedSshOperation(
               run.transport,
               "inventory",
-              context.abort,
+              operation.controller.signal,
             );
             const inventory = parseSshInventory(response.stdout, run.transport.plan);
             run.transport = transitionSshTransport(run.transport, {
@@ -846,7 +1124,6 @@ export const YuanshengTracePlugin: Plugin = async () => {
               type: "bind_inventory",
             });
             inventoryAttempted = false;
-            run.inventoryInFlight = false;
             context.metadata({
               metadata: {
                 directories: inventory.inventory.directories,
@@ -867,8 +1144,13 @@ export const YuanshengTracePlugin: Plugin = async () => {
               run_id,
             });
           } catch (error) {
-            let cleanupFailed = false;
-            if (inventoryAttempted) {
+            const inventoryCleanupSafe =
+              !inventoryAttempted || !(error instanceof OpenSshRuntimeError) || error.cleanupSafe;
+            if (!inventoryCleanupSafe) {
+              run.cleanupSafety.remoteInventory = false;
+            }
+            let cleanupFailed = inventoryAttempted && !inventoryCleanupSafe;
+            if (inventoryAttempted && inventoryCleanupSafe) {
               try {
                 const cleanup = await runApprovedSshOperation(
                   run.transport,
@@ -879,21 +1161,344 @@ export const YuanshengTracePlugin: Plugin = async () => {
                   `${SSH_TRANSPORT_PROTOCOL_MARKERS.inventoryCleanup}\n`,
                 );
                 cleanupFailed = !bytesEqual(cleanup.stdout, expectedCleanup);
-              } catch {
+              } catch (cleanupError) {
+                if (cleanupError instanceof OpenSshRuntimeError && !cleanupError.cleanupSafe) {
+                  run.cleanupSafety.remoteInventory = false;
+                }
                 cleanupFailed = true;
               }
             }
-            deleteRemoteRun(context.sessionID, run_id, run);
             if (cleanupFailed) {
+              run.transport = transitionSshTransport(run.transport, {
+                cleanup: cleanupStatus({
+                  localRemoved: true,
+                  localResidualPaths: [],
+                  remoteRemoved: true,
+                  remoteResidualPaths: [run.transport.plan.plan.remote_inventory_temp],
+                  run,
+                }),
+                error_code: "transport_failed",
+                type: "fail",
+              });
               throw new TraceRuntimeError(
                 "remote_transport_failed",
                 `Remote inventory failed and may have left ${run.transport.plan.plan.remote_inventory_temp}`,
               );
             }
+            deleteRemoteRun(context.sessionID, run_id, run);
             throw boundedTransportError(
               error,
               "The approved remote inventory operation could not be completed",
             );
+          } finally {
+            run.inventoryInFlight = false;
+            finishRemoteOperation(run, operation);
+          }
+        },
+      }),
+      ys_trace_transfer_remote_input: tool({
+        description:
+          "Transfer an explicitly confirmed Yuansheng Trace SSH inventory into a verified local snapshot and clean the remote staging directory.",
+        args: {
+          inventory_sha256: tool.schema.string().regex(SHA256),
+          plan_sha256: tool.schema.string().regex(SHA256),
+          run_id: tool.schema.string().regex(RUN_ID),
+        },
+        async execute({ inventory_sha256, plan_sha256, run_id }, context) {
+          if (disposing) {
+            fail("invalid_run", "Yuansheng Trace is disposing this plugin instance");
+          }
+          const run = remoteSessions.get(context.sessionID)?.get(run_id);
+          if (run === undefined) {
+            fail("invalid_run", "The remote trace run is unknown in this OpenCode session");
+          }
+          if (
+            run.transport.phase !== "awaiting_transfer_confirmation" ||
+            run.transport.plan.plan_sha256 !== plan_sha256 ||
+            run.transport.inventory.inventory_sha256 !== inventory_sha256
+          ) {
+            fail("invalid_run", "The remote trace run is not waiting for this exact transfer");
+          }
+          if (run.transferInFlight || run.inventoryInFlight) {
+            fail("invalid_run", "The remote trace run already has an operation in progress");
+          }
+
+          const transferConfirmationSha256 = canonicalizeJson({
+            inventory_sha256,
+            plan_sha256,
+            run_id,
+          }).sha256;
+          const operation = beginRemoteOperation(run, context.abort, "awaiting_authorization");
+          run.transferInFlight = true;
+          try {
+            try {
+              await context.ask({
+                always: [transferConfirmationSha256],
+                metadata: {
+                  inventory: run.transport.inventory.inventory,
+                  inventory_sha256,
+                  plan_sha256,
+                  run_id,
+                  transfer_confirmation_sha256: transferConfirmationSha256,
+                },
+                patterns: [transferConfirmationSha256],
+                permission: "ys_trace_ssh_transfer",
+              });
+            } catch (error) {
+              throw boundedTransportError(error, "The remote snapshot transfer was not approved");
+            }
+            checkCancelled(operation.controller.signal);
+            operation.phase = "running";
+
+            let stageCleanupSafe = true;
+            let remoteInventoryMayExist = false;
+            try {
+              run.transport = transitionSshTransport(run.transport, {
+                inventory_sha256,
+                type: "confirm_transfer",
+              });
+              if (run.transport.phase !== "transferring") {
+                fail("invalid_run", "The remote trace run did not enter its transfer phase");
+              }
+              const transferring = run.transport;
+              let stageResponse: Awaited<ReturnType<typeof runApprovedSshStage>>;
+              remoteInventoryMayExist = true;
+              try {
+                stageResponse = await runApprovedSshStage(
+                  transferring,
+                  operation.controller.signal,
+                );
+                remoteInventoryMayExist = false;
+              } catch (error) {
+                let rejection: SshStageRejection;
+                if (error instanceof OpenSshRuntimeError) {
+                  stageCleanupSafe = error.cleanupSafe;
+                  if (!error.cleanupSafe) {
+                    run.cleanupSafety.remoteStage = false;
+                    run.cleanupSafety.remoteInventory = false;
+                  }
+                  rejection = rejectedStageFromRuntimeError(error, transferring);
+                } else {
+                  rejection = {
+                    cleanup_lease: createSshRemoteCleanupLease(transferring.plan, inventory_sha256),
+                    error_code: "snapshot_mismatch",
+                    error_message: "The remote stage process did not complete successfully",
+                    ok: false,
+                  };
+                }
+                run.transport = transitionSshTransport(transferring, {
+                  rejection,
+                  type: "reject_stage",
+                });
+                throw error;
+              }
+
+              let parsedStage: ReturnType<typeof parseSshStage>;
+              try {
+                parsedStage = parseSshStage(
+                  stageResponse.stdout,
+                  transferring.plan,
+                  inventory_sha256,
+                );
+              } catch (error) {
+                run.transport = transitionSshTransport(transferring, {
+                  rejection: {
+                    cleanup_lease: createSshRemoteCleanupLease(transferring.plan, inventory_sha256),
+                    error_code: "snapshot_mismatch",
+                    error_message: "The remote stage response could not be validated",
+                    ok: false,
+                  },
+                  type: "reject_stage",
+                });
+                throw error;
+              }
+              if (!parsedStage.ok) {
+                run.transport = transitionSshTransport(transferring, {
+                  rejection: parsedStage,
+                  type: "reject_stage",
+                });
+                throw new SshTransportError(parsedStage.error_code, parsedStage.error_message);
+              }
+              run.transport = transitionSshTransport(transferring, {
+                stage: parsedStage.stage,
+                type: "bind_stage",
+              });
+              if (run.transport.phase !== "downloading") {
+                fail("invalid_run", "The remote trace run did not enter its download phase");
+              }
+
+              const downloading = run.transport;
+              try {
+                run.localSnapshot = await createLocalSshSnapshot(
+                  downloading,
+                  operation.controller.signal,
+                );
+              } catch (error) {
+                if (error instanceof LocalSshSnapshotError && error.residualRoot !== null) {
+                  run.localResidualPaths.add(error.residualRoot);
+                }
+                throw error;
+              }
+              try {
+                await runApprovedSftpDownload(
+                  downloading,
+                  run.localSnapshot,
+                  operation.controller.signal,
+                );
+              } catch (error) {
+                if (error instanceof OpenSshRuntimeError) {
+                  stageCleanupSafe = error.cleanupSafe;
+                  if (!error.cleanupSafe) {
+                    run.cleanupSafety.local = false;
+                    run.cleanupSafety.remoteStage = false;
+                  }
+                }
+                throw error;
+              }
+              const mapping = await materializeLocalSshSnapshot(
+                run.localSnapshot,
+                downloading,
+                operation.controller.signal,
+              );
+
+              remoteInventoryMayExist = true;
+              let postInventoryResponse: Awaited<ReturnType<typeof runApprovedSshPostInventory>>;
+              try {
+                postInventoryResponse = await runApprovedSshPostInventory(
+                  downloading,
+                  operation.controller.signal,
+                );
+                remoteInventoryMayExist = false;
+              } catch (error) {
+                if (error instanceof OpenSshRuntimeError) {
+                  if (!error.cleanupSafe) {
+                    run.cleanupSafety.remoteInventory = false;
+                  }
+                }
+                throw error;
+              }
+              const postInventory = parseSshInventory(
+                postInventoryResponse.stdout,
+                downloading.plan,
+              );
+              if (postInventory.inventory_sha256 !== inventory_sha256) {
+                throw new SshTransportError(
+                  "source_changed",
+                  "The remote source changed before the snapshot transfer completed",
+                );
+              }
+
+              let cleanupResponse: Awaited<ReturnType<typeof runApprovedSshCleanup>>;
+              try {
+                cleanupResponse = await runApprovedSshCleanup(
+                  downloading,
+                  new AbortController().signal,
+                );
+              } catch (error) {
+                if (error instanceof OpenSshRuntimeError) {
+                  stageCleanupSafe = error.cleanupSafe;
+                  if (!error.cleanupSafe) {
+                    run.cleanupSafety.remoteStage = false;
+                  }
+                }
+                throw error;
+              }
+              const remoteCleanup = parseSshCleanup(cleanupResponse.stdout, {
+                cleanupLease: downloading.cleanup_lease,
+                plan: downloading.plan,
+              });
+              run.transport = transitionSshTransport(downloading, {
+                cleanup: remoteCleanup,
+                mapping,
+                type: "complete_staging",
+              });
+              context.metadata({
+                metadata: {
+                  inventory_sha256,
+                  local_tree_root: mapping.mapping.local_tree_root,
+                  mapping_sha256: mapping.mapping_sha256,
+                  plan_sha256,
+                  run_id,
+                  stage_sha256: mapping.mapping.stage_sha256,
+                },
+                title: `Yuansheng Trace SSH snapshot: ${mapping.mapping_sha256}`,
+              });
+              return JSON.stringify({
+                inventory_sha256,
+                local_tree_root: mapping.mapping.local_tree_root,
+                mapping,
+                next_action: "local_snapshot_ready_for_validation",
+                phase: run.transport.phase,
+                plan_sha256,
+                run_id,
+              });
+            } catch (error) {
+              let postInventoryRemoved = !remoteInventoryMayExist;
+              if (remoteInventoryMayExist && run.cleanupSafety.remoteInventory) {
+                try {
+                  const cleanup = await runApprovedSshPostInventoryCleanup(
+                    run.transport,
+                    new AbortController().signal,
+                  );
+                  const expected = UTF8_ENCODER.encode(
+                    `${SSH_TRANSPORT_PROTOCOL_MARKERS.inventoryCleanup}\n`,
+                  );
+                  postInventoryRemoved = bytesEqual(cleanup.stdout, expected);
+                } catch (cleanupError) {
+                  if (cleanupError instanceof OpenSshRuntimeError && !cleanupError.cleanupSafe) {
+                    run.cleanupSafety.remoteInventory = false;
+                  }
+                  postInventoryRemoved = false;
+                }
+              }
+              const localCleanup = await cleanupLocalSnapshot(run);
+              const remoteRemoved = stageCleanupSafe ? await cleanupRemoteSnapshot(run) : false;
+              const cleanup = cleanupStatus({
+                localRemoved: localCleanup.removed,
+                localResidualPaths: localCleanup.residualPaths,
+                remoteRemoved,
+                remoteResidualPaths: postInventoryRemoved
+                  ? []
+                  : [run.transport.plan.plan.remote_inventory_temp],
+                run,
+              });
+              try {
+                run.transport = transitionSshTransport(run.transport, {
+                  cleanup,
+                  error_code:
+                    error instanceof SshTransportError
+                      ? error.code
+                      : error instanceof OpenSshRuntimeError && error.code === "operation_cancelled"
+                        ? "operation_cancelled"
+                        : error instanceof OpenSshRuntimeError && error.code === "operation_timeout"
+                          ? "operation_timeout"
+                          : "transport_failed",
+                  type: "fail",
+                });
+              } catch {
+                // The bounded failure below remains authoritative if state recording also fails.
+              }
+              if (
+                cleanup.local_staging_removed &&
+                cleanup.remote_temp_removed &&
+                cleanup.residual_paths.length === 0
+              ) {
+                deleteRemoteRun(context.sessionID, run_id, run);
+              }
+              if (cleanup.residual_paths.length > 0) {
+                throw new TraceRuntimeError(
+                  "remote_transport_failed",
+                  `The SSH snapshot transfer failed and left cleanup residuals: ${cleanup.residual_paths.join(", ")}`,
+                );
+              }
+              throw boundedTransportError(
+                error,
+                "The approved SSH snapshot transfer could not be completed",
+              );
+            }
+          } finally {
+            run.transferInFlight = false;
+            finishRemoteOperation(run, operation);
           }
         },
       }),
@@ -1025,6 +1630,9 @@ export const YuanshengTracePlugin: Plugin = async () => {
           software: tool.schema.string(),
         },
         async execute({ artifact_root, perf_data_root, software, ssh_alias, ssh_limits }, context) {
+          if (disposing) {
+            fail("invalid_run", "Yuansheng Trace is disposing this plugin instance");
+          }
           const projectRoot = requireProjectRoot(context.worktree, context.directory);
           const resolvedArtifactRoot = resolveArtifactRoot(projectRoot, artifact_root);
           if (ssh_alias !== undefined) {
@@ -1069,15 +1677,26 @@ export const YuanshengTracePlugin: Plugin = async () => {
                 patterns: [plan.plan_sha256],
                 permission: "ys_trace_ssh_transport",
               });
+              if (disposing) {
+                fail("invalid_run", "Yuansheng Trace disposed before SSH plan approval completed");
+              }
               transport = transitionSshTransport(transport, {
                 plan_sha256: plan.plan_sha256,
                 type: "approve_plan",
               });
               const remoteRun: PendingRemoteRun = {
                 artifactRoot: resolvedArtifactRoot,
+                cleanupSafety: {
+                  local: true,
+                  remoteInventory: true,
+                  remoteStage: true,
+                },
                 inventoryInFlight: false,
+                lifecycleAbort: new AbortController(),
+                localResidualPaths: new Set<string>(),
                 software: remoteSoftware,
                 transport,
+                transferInFlight: false,
               };
               registerRemoteRun(context.sessionID, remoteRunId, remoteRun);
               remoteRunRegistered = true;
@@ -1157,6 +1776,9 @@ export const YuanshengTracePlugin: Plugin = async () => {
               patterns: approvalPaths,
               permission: "ys_trace_start",
             });
+            if (disposing) {
+              fail("invalid_run", "Yuansheng Trace disposed before start approval completed");
+            }
             registerRun(context.sessionID, runId, run);
             runRegistered = true;
 

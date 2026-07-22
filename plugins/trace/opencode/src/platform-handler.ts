@@ -65,6 +65,7 @@ interface RuntimeConfiguration {
   readonly packageResource: string;
   readonly reportTool: string;
   readonly startTool: string;
+  readonly transferTool: string;
 }
 
 interface OpenCodeConfiguration {
@@ -308,6 +309,7 @@ function parseRuntime(value: unknown): RuntimeConfiguration {
       "package_resource",
       "report_tool",
       "start_tool",
+      "transfer_tool",
     ],
     "runtime",
   );
@@ -318,14 +320,16 @@ function parseRuntime(value: unknown): RuntimeConfiguration {
   const inventoryTool = requireString(runtime.inventory_tool, "runtime.inventory_tool");
   const reportTool = requireString(runtime.report_tool, "runtime.report_tool");
   const startTool = requireString(runtime.start_tool, "runtime.start_tool");
+  const transferTool = requireString(runtime.transfer_tool, "runtime.transfer_tool");
   if (
     !SAFE_PERMISSION_NAME.test(inventoryTool) ||
     !SAFE_PERMISSION_NAME.test(reportTool) ||
-    !SAFE_PERMISSION_NAME.test(startTool)
+    !SAFE_PERMISSION_NAME.test(startTool) ||
+    !SAFE_PERMISSION_NAME.test(transferTool)
   ) {
     fail("runtime tools must be normalized OpenCode tool identifiers");
   }
-  if (new Set([inventoryTool, reportTool, startTool]).size !== 3) {
+  if (new Set([inventoryTool, reportTool, startTool, transferTool]).size !== 4) {
     fail("runtime tools must be distinct");
   }
   return {
@@ -340,6 +344,7 @@ function parseRuntime(value: unknown): RuntimeConfiguration {
     packageResource: requireIdentifier(runtime.package_resource, "runtime.package_resource"),
     reportTool,
     startTool,
+    transferTool,
   };
 }
 
@@ -396,7 +401,9 @@ function parseConfiguration(value: unknown): OpenCodeConfiguration {
       "ys_trace_inventory_remote_input",
       "ys_trace_provide_validation_report",
       "ys_trace_ssh_transport",
+      "ys_trace_ssh_transfer",
       "ys_trace_start",
+      "ys_trace_transfer_remote_input",
     ],
     "permissions",
   );
@@ -405,7 +412,8 @@ function parseConfiguration(value: unknown): OpenCodeConfiguration {
   if (
     permissions[runtime.startTool] !== "allow" ||
     permissions[runtime.reportTool] !== "allow" ||
-    permissions[runtime.inventoryTool] !== "allow"
+    permissions[runtime.inventoryTool] !== "allow" ||
+    permissions[runtime.transferTool] !== "allow"
   ) {
     fail("runtime tool permissions must be allow");
   }
@@ -417,7 +425,8 @@ function parseConfiguration(value: unknown): OpenCodeConfiguration {
     permissions.webfetch !== "deny" ||
     permissions.websearch !== "deny" ||
     permissions.write !== "deny" ||
-    permissions.ys_trace_ssh_transport !== "ask"
+    permissions.ys_trace_ssh_transport !== "ask" ||
+    permissions.ys_trace_ssh_transfer !== "ask"
   ) {
     fail("non-Bash permissions do not match the read-only runtime policy");
   }
@@ -518,7 +527,7 @@ function generateCommand(configuration: OpenCodeConfiguration, body: string): Ui
       "",
       `User input: ${configuration.command.argumentPlaceholder}`,
       "",
-      `After collecting both required inputs, call ${configuration.runtime.startTool} with those exact values and the optional artifact_root override. For an explicitly requested SSH source, also pass the exact ssh_alias and any user-specified ssh_limits; never infer an alias. Present the returned absolute artifact_root and exact transport plan before any later effect. After approval, use ${configuration.runtime.inventoryTool} only for the returned run and plan digest, present the complete inventory, and stop for explicit transfer confirmation.`,
+      `After collecting both required inputs, call ${configuration.runtime.startTool} with those exact values and the optional artifact_root override. For an explicitly requested SSH source, also pass the exact ssh_alias and any user-specified ssh_limits; never infer an alias. Present the returned absolute artifact_root and exact transport plan before any later effect. After approval, use ${configuration.runtime.inventoryTool} only for the returned run and plan digest, present the complete inventory, and stop for explicit transfer confirmation. Only after that confirmation, call ${configuration.runtime.transferTool} with the unchanged run, plan, and inventory digests.`,
       "",
       body,
     ].join("\n"),

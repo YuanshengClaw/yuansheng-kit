@@ -1,11 +1,24 @@
 import { expect, test } from "bun:test";
 import { randomBytes } from "node:crypto";
-import { lstat, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import {
+  copyFile,
+  lstat,
+  mkdir,
+  mkdtemp,
+  readFile,
+  rm,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-
 import {
-  createSshSnapshotMapping,
+  cleanupLocalSshSnapshot,
+  createLocalSshSnapshot,
+  materializeLocalSshSnapshot,
+  validatedLocalSshObjectsCwd,
+} from "../../../plugins/trace/opencode/src/local-ssh-snapshot";
+import {
   createSshTransportPlan,
   createSshTransportState,
   parseSshCleanup,
@@ -164,6 +177,7 @@ test("SSH plans bind exact safe commands, session, run, and approval", () => {
 test("fixed Linux protocol preserves raw paths and binds inventory, stage, objects, and cleanup", async () => {
   const source = await mkdtemp(join(tmpdir(), "yuansheng-ssh-source-"));
   const id = runId();
+  const localRoot = `/tmp/yuansheng-ssh-local-${id}`;
   let stagedTemp: string | undefined;
   try {
     await mkdir(join(source, "empty"));
@@ -226,7 +240,40 @@ test("fixed Linux protocol preserves raw paths and binds inventory, stage, objec
     expect(await readFile(join(stagedTemp, "objects", "f00000001"), "utf8")).toBe("normal-content");
     state = transitionSshTransport(state, { stage, type: "bind_stage" });
     expect(state.phase).toBe("downloading");
-    expect(createSshSnapshotMapping({ plan, stage }).mapping.stage_sha256).toBe(stage.stage_sha256);
+    if (state.phase !== "downloading") {
+      throw new Error("Expected a downloading transport state");
+    }
+    const localSnapshot = await createLocalSshSnapshot(state, new AbortController().signal);
+    const objectsCwd = await validatedLocalSshObjectsCwd(
+      localSnapshot,
+      state,
+      new AbortController().signal,
+    );
+    for (const object of stage.stage.objects) {
+      await copyFile(
+        join(stagedTemp, "objects", object.object_id),
+        join(objectsCwd, object.object_id),
+      );
+    }
+    const mapping = await materializeLocalSshSnapshot(
+      localSnapshot,
+      state,
+      new AbortController().signal,
+    );
+    expect(mapping.mapping.stage_sha256).toBe(stage.stage_sha256);
+    expect(await readFile(join(mapping.mapping.local_tree_root, "normal file"), "utf8")).toBe(
+      "normal-content",
+    );
+    expect((await lstat(join(mapping.mapping.local_tree_root, "empty"))).isDirectory()).toBeTrue();
+    expect(
+      await readFile(
+        Buffer.concat([
+          Buffer.from(`${mapping.mapping.local_tree_root}/raw/`, "utf8"),
+          Buffer.from([0xff, 0x0a, 0x78]),
+        ]),
+        "utf8",
+      ),
+    ).toBe("raw-content");
 
     const cleanupBytes = requireRemoteSuccess(
       await runRemote(plan, "cleanup", {
@@ -234,18 +281,26 @@ test("fixed Linux protocol preserves raw paths and binds inventory, stage, objec
         YS_TRACE_REMOTE_TEMP_BASE64: stage.stage.remote_temp_base64,
       }),
     );
-    expect(
-      parseSshCleanup(cleanupBytes, {
-        cleanupLease: stageResult.cleanup_lease,
-        plan,
-      }).remote_temp_removed,
-    ).toBeTrue();
+    const remoteCleanup = parseSshCleanup(cleanupBytes, {
+      cleanupLease: stageResult.cleanup_lease,
+      plan,
+    });
+    state = transitionSshTransport(state, {
+      cleanup: remoteCleanup,
+      mapping,
+      type: "complete_staging",
+    });
+    expect(state.phase).toBe("staged");
+    const localCleanup = await cleanupLocalSshSnapshot(localSnapshot);
+    expect(localCleanup).toMatchObject({ local_staging_removed: true, residual_paths: [] });
     await expect(lstat(stagedTemp)).rejects.toMatchObject({ code: "ENOENT" });
+    await expect(lstat(localRoot)).rejects.toMatchObject({ code: "ENOENT" });
     stagedTemp = undefined;
   } finally {
     if (stagedTemp !== undefined) {
       await rm(stagedTemp, { force: true, recursive: true });
     }
+    await rm(localRoot, { force: true, recursive: true });
     await rm(source, { force: true, recursive: true });
   }
 });
@@ -348,11 +403,96 @@ test("a rejected stage retains its exact remote cleanup lease", async () => {
   }
 });
 
-test("remote inventory rejects unsafe trees and never removes a pre-existing run path", async () => {
+test("local SSH snapshots reject changed objects and remove only their bound staging root", async () => {
+  const source = await mkdtemp(join(tmpdir(), "yuansheng-ssh-local-reject-"));
+  const id = runId();
+  const localRoot = `/tmp/yuansheng-ssh-local-${id}`;
+  let stagedTemp: string | undefined;
+  try {
+    await writeFile(join(source, "input"), "expected");
+    const plan = planFor(source, id, {
+      maxEntries: 8,
+      maxFileBytes: 1024,
+      maxFiles: 4,
+      maxTotalBytes: 4096,
+    });
+    let state = createSshTransportState(plan, {
+      runId: id,
+      sessionId: "ssh-transport-test-session",
+    });
+    state = transitionSshTransport(state, {
+      plan_sha256: plan.plan_sha256,
+      type: "approve_plan",
+    });
+    const inventory = parseSshInventory(
+      requireRemoteSuccess(await runRemote(plan, "inventory")),
+      plan,
+    );
+    state = transitionSshTransport(state, { inventory, type: "bind_inventory" });
+    state = transitionSshTransport(state, {
+      inventory_sha256: inventory.inventory_sha256,
+      type: "confirm_transfer",
+    });
+    const stageResult = parseSshStage(
+      requireRemoteSuccess(
+        await runRemote(plan, "stage", {
+          YS_TRACE_CONFIRMED_INVENTORY_SHA256: inventory.inventory_sha256,
+        }),
+      ),
+      plan,
+      inventory.inventory_sha256,
+    );
+    if (!stageResult.ok) {
+      throw new Error(`Expected stage acceptance: ${stageResult.error_message}`);
+    }
+    stagedTemp = stageResult.stage.stage.remote_temp;
+    state = transitionSshTransport(state, { stage: stageResult.stage, type: "bind_stage" });
+    if (state.phase !== "downloading") {
+      throw new Error("Expected a downloading transport state");
+    }
+
+    const localSnapshot = await createLocalSshSnapshot(state, new AbortController().signal);
+    const objectsCwd = await validatedLocalSshObjectsCwd(
+      localSnapshot,
+      state,
+      new AbortController().signal,
+    );
+    await writeFile(join(objectsCwd, "f00000001"), "tampered");
+    await expect(
+      materializeLocalSshSnapshot(localSnapshot, state, new AbortController().signal),
+    ).rejects.toMatchObject({ code: "snapshot_mismatch" });
+    expect(await cleanupLocalSshSnapshot(localSnapshot)).toMatchObject({
+      local_staging_removed: true,
+      residual_paths: [],
+    });
+    await expect(lstat(localRoot)).rejects.toMatchObject({ code: "ENOENT" });
+
+    parseSshCleanup(
+      requireRemoteSuccess(
+        await runRemote(plan, "cleanup", {
+          YS_TRACE_OWNER_MARKER_SHA256: stageResult.cleanup_lease.owner_marker_sha256,
+          YS_TRACE_REMOTE_TEMP_BASE64: stageResult.cleanup_lease.remote_temp_base64,
+        }),
+      ),
+      { cleanupLease: stageResult.cleanup_lease, plan },
+    );
+    await expect(lstat(stagedTemp)).rejects.toMatchObject({ code: "ENOENT" });
+    stagedTemp = undefined;
+  } finally {
+    if (stagedTemp !== undefined) {
+      await rm(stagedTemp, { force: true, recursive: true });
+    }
+    await rm(localRoot, { force: true, recursive: true });
+    await rm(source, { force: true, recursive: true });
+  }
+});
+
+test("remote operations reject unsafe trees and preserve pre-existing run paths", async () => {
   const source = await mkdtemp(join(tmpdir(), "yuansheng-ssh-reject-"));
   const id = runId();
   const plan = planFor(source, id);
   const preexisting = plan.plan.remote_inventory_temp;
+  const stagedPreexisting = plan.plan.remote_temp;
   try {
     await writeFile(join(source, "file"), "content");
     await mkdir(preexisting, { mode: 0o700 });
@@ -361,7 +501,21 @@ test("remote inventory rejects unsafe trees and never removes a pre-existing run
     expect(collision.exitCode).not.toBe(0);
     expect(await readFile(join(preexisting, "sentinel"), "utf8")).toBe("keep");
 
+    await rm(join(preexisting, "sentinel"));
+    const collisionCleanup = await runRemote(plan, "inventory_cleanup");
+    expect(collisionCleanup.exitCode).not.toBe(0);
+    expect((await lstat(preexisting)).isDirectory()).toBeTrue();
+
     await rm(preexisting, { recursive: true });
+    await mkdir(stagedPreexisting, { mode: 0o700 });
+    await writeFile(join(stagedPreexisting, "sentinel"), "keep");
+    const stageCollision = await runRemote(plan, "stage", {
+      YS_TRACE_CONFIRMED_INVENTORY_SHA256: "a".repeat(64),
+    });
+    expect(stageCollision.exitCode).not.toBe(0);
+    expect(await readFile(join(stagedPreexisting, "sentinel"), "utf8")).toBe("keep");
+    await rm(stagedPreexisting, { recursive: true });
+
     await symlink(join(source, "file"), join(source, "link"));
     const linked = await runRemote(plan, "inventory");
     expect(linked.exitCode).not.toBe(0);
@@ -369,6 +523,7 @@ test("remote inventory rejects unsafe trees and never removes a pre-existing run
     await expect(lstat(preexisting)).rejects.toMatchObject({ code: "ENOENT" });
   } finally {
     await rm(preexisting, { force: true, recursive: true });
+    await rm(stagedPreexisting, { force: true, recursive: true });
     await rm(source, { force: true, recursive: true });
   }
 });

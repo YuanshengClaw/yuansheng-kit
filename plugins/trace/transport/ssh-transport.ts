@@ -20,6 +20,7 @@ const STAGE_MAGIC = "YS_TRACE_SSH_STAGE_V1";
 const CLEANUP_MAGIC = "YS_TRACE_SSH_CLEANUP_V1";
 const INVENTORY_CLEANUP_RESULT = "YS_TRACE_SSH_INVENTORY_CLEANUP_V1\n";
 const OBJECT_ID = /^f[0-9]{8}$/u;
+const SSH_EXECUTABLE_PLACEHOLDER = "YS_TRACE_SSH_EXECUTABLE";
 const MAX_SAFE_INTEGER = BigInt(Number.MAX_SAFE_INTEGER);
 const SIGNED_64_MIN = -(1n << 63n);
 const SIGNED_64_MAX = (1n << 63n) - 1n;
@@ -111,7 +112,7 @@ export interface SshTransportPlanV1 {
   readonly allowed_entry_types: readonly ["directory", "regular_file"];
   readonly cleanup: Readonly<{
     readonly local: "remove-only-the-bound-private-staging-root";
-    readonly remote: "remove-only-the-returned-run-bound-mktemp-directory";
+    readonly remote: "remove-only-the-plan-bound-private-staging-root";
   }>;
   readonly commands: Readonly<{
     readonly cleanup: SshCommandPlan;
@@ -148,12 +149,13 @@ export interface SshTransportPlanV1 {
   }>;
   readonly remote_required_commands: readonly string[];
   readonly remote_inventory_temp: string;
-  readonly remote_temp_template: string;
+  readonly remote_temp: string;
   readonly run_id: string;
   readonly session_binding_sha256: string;
   readonly sftp: Readonly<{
     readonly argv_prefix: readonly string[];
     readonly batch_protocol: "safe-object-id-get-v1";
+    readonly maximum_stdout_bytes: number;
   }>;
 }
 
@@ -304,6 +306,7 @@ export type SshTransportState =
   | (SshTransportStateBase &
       Readonly<{
         cleanup_lease: SshRemoteCleanupLeaseV1;
+        cleanup: SshCleanupStatus;
         inventory: SshInventoryEnvelope;
         mapping: SshSnapshotMappingEnvelope;
         phase: "staged";
@@ -328,7 +331,11 @@ export type SshTransportEvent =
   | Readonly<{ inventory_sha256: string; type: "confirm_transfer" }>
   | Readonly<{ stage: SshStageEnvelope; type: "bind_stage" }>
   | Readonly<{ rejection: SshStageRejection; type: "reject_stage" }>
-  | Readonly<{ mapping: SshSnapshotMappingEnvelope; type: "complete_staging" }>
+  | Readonly<{
+      cleanup: SshCleanupStatus;
+      mapping: SshSnapshotMappingEnvelope;
+      type: "complete_staging";
+    }>
   | Readonly<{
       cleanup: SshCleanupStatus;
       error_code: SshTransportErrorCode;
@@ -457,6 +464,10 @@ function maximumStageBytes(limits: SshTransportLimits): number {
   return maximumInventoryBytes(limits) + limits.maxFiles * 112 + 512;
 }
 
+function maximumSftpBytes(limits: SshTransportLimits): number {
+  return limits.maxFiles * 192 + 4096;
+}
+
 const SHELL_DOLLAR = "$";
 const REMOTE_REQUIRED_COMMANDS = Object.freeze([
   "base64",
@@ -468,7 +479,6 @@ const REMOTE_REQUIRED_COMMANDS = Object.freeze([
   "head",
   "id",
   "mkdir",
-  "mktemp",
   "realpath",
   "rm",
   "rmdir",
@@ -493,7 +503,7 @@ const REMOTE_SCRIPT_LINES = [
   "REMOTE_UID=",
   "KEEP_REMOTE_TEMP=0",
   `cleanup_transient() { local target=${SHELL_DOLLAR}{TRANSIENT_TEMP-}; TRANSIENT_TEMP=; if [[ -n $target ]]; then rm -rf -- "$target" || return 70; [[ ! -e $target && ! -L $target ]] || return 70; fi; }`,
-  `valid_remote_temp_shape() { local candidate=$1 run_id=$2 prefix suffix; prefix="/tmp/yuansheng-ys-trace-$run_id."; [[ $candidate == "$prefix"* ]] || return 1; suffix=${SHELL_DOLLAR}{candidate#"$prefix"}; [[ $suffix =~ ^[A-Za-z0-9]{8}$ ]]; }`,
+  'valid_remote_temp_shape() { local candidate=$1 run_id=$2; [[ $candidate == "/tmp/yuansheng-ys-trace-$run_id" ]]; }',
   'remove_uncommitted_temp() { local candidate=$1 run_id=$2 uid=$3; valid_remote_temp_shape "$candidate" "$run_id" || return 1; [[ -d $candidate && ! -L $candidate ]] || return 1; [[ $(stat --printf=\'%u\' -- "$candidate") == "$uid" ]] || return 1; rm -rf --one-file-system -- "$candidate" || return 1; [[ ! -e $candidate && ! -L $candidate ]]; }',
   'on_exit() { local status=$?; trap - EXIT; cleanup_transient || { (( status == 0 )) && status=70; }; if (( status != 0 && KEEP_REMOTE_TEMP == 0 )) && [[ -n $REMOTE_TEMP ]]; then remove_uncommitted_temp "$REMOTE_TEMP" "$REMOTE_RUN_ID" "$REMOTE_UID" || :; fi; exit "$status"; }',
   "trap on_exit EXIT",
@@ -547,7 +557,7 @@ const REMOTE_SCRIPT_LINES = [
   "  if [[ ! -e $target && ! -L $target ]]; then printf 'YS_TRACE_SSH_INVENTORY_CLEANUP_V1\\n'; return; fi",
   "  [[ -d $target && ! -L $target ]] || fail inventory_temp_invalid",
   "  marker=$target/.ys-trace-owner",
-  "  if [[ ! -e $marker && ! -L $marker ]]; then rmdir -- \"$target\" || fail marker_missing; printf 'YS_TRACE_SSH_INVENTORY_CLEANUP_V1\\n'; return; fi",
+  "  [[ -e $marker || -L $marker ]] || fail marker_missing",
   "  [[ -f $marker && ! -L $marker ]] || fail marker_invalid",
   "  uid=$(id -u) || fail uid_failed",
   '  [[ $(stat --printf=\'%u\' -- "$target") == "$uid" && $(stat --printf=\'%u\' -- "$marker") == "$uid" ]] || fail inventory_temp_owner_invalid',
@@ -560,15 +570,17 @@ const REMOTE_SCRIPT_LINES = [
   "}",
   "stage_snapshot() {",
   "  local root=$1 run_id=$2 confirmed_inventory_sha=$3 max_depth=$4 max_entries=$5 max_files=$6 max_path_bytes=$7 max_file_bytes=$8 max_total_bytes=$9",
-  "  local prefix suffix objects marker response object_records remote_temp_base64 owner_marker_sha",
+  "  local candidate objects marker response object_records remote_temp_base64 owner_marker_sha",
   "  local entries=0 files=0 directories=0 total=0 file_index=0 path relative path_base64 kind hash status_before status_mid status_after hash_after",
   "  local device inode mode size mtime ctime object_id object object_size object_hash",
   "  [[ $run_id =~ ^[0-9a-f]{32}$ ]] || fail run_id_invalid",
   "  [[ $confirmed_inventory_sha =~ ^[0-9a-f]{64}$ ]] || fail inventory_sha_invalid",
   "  REMOTE_RUN_ID=$run_id",
   "  REMOTE_UID=$(id -u) || fail uid_failed",
-  '  REMOTE_TEMP=$(mktemp -d -- "/tmp/yuansheng-ys-trace-$run_id.XXXXXXXX") || fail mktemp_failed',
-  '  valid_remote_temp_shape "$REMOTE_TEMP" "$run_id" || fail temp_invalid',
+  '  candidate="/tmp/yuansheng-ys-trace-$run_id"',
+  '  valid_remote_temp_shape "$candidate" "$run_id" || fail temp_invalid',
+  '  mkdir -m 0700 -- "$candidate" || fail staging_temp_exists',
+  "  REMOTE_TEMP=$candidate",
   "  [[ -d $REMOTE_TEMP && ! -L $REMOTE_TEMP ]] || fail temp_invalid",
   '  [[ $(stat --printf=\'%u\' -- "$REMOTE_TEMP") == "$REMOTE_UID" ]] || fail temp_owner_invalid',
   '  [[ $REMOTE_TEMP != "$root/"* && $root != "$REMOTE_TEMP/"* ]] || fail staging_overlaps_source',
@@ -794,7 +806,23 @@ function buildSshTransportPlan(input: {
   const rootBase64 = encoded(remoteRoot);
   const sessionBindingSha256 = input.sessionBindingSha256;
   const maximumStdoutBytes = maximumInventoryBytes(limits);
-  const sshPrefix = ["-o", "BatchMode=yes", "--", alias, "bash", "-s", "--"] as const;
+  const safeConnectionOptions = [
+    "-o",
+    "BatchMode=yes",
+    "-o",
+    "ClearAllForwardings=yes",
+    "-o",
+    "EscapeChar=none",
+    "-o",
+    "ForwardAgent=no",
+    "-o",
+    "ForwardX11=no",
+    "-o",
+    "PermitLocalCommand=no",
+    "-o",
+    "RequestTTY=no",
+  ] as const;
+  const sshPrefix = ["-T", ...safeConnectionOptions, "--", alias, "bash", "-s", "--"] as const;
   const limitArguments = [
     String(limits.maxDepth),
     String(limits.maxEntries),
@@ -815,7 +843,7 @@ function buildSshTransportPlan(input: {
     allowed_entry_types: ["directory", "regular_file"],
     cleanup: {
       local: "remove-only-the-bound-private-staging-root",
-      remote: "remove-only-the-returned-run-bound-mktemp-directory",
+      remote: "remove-only-the-plan-bound-private-staging-root",
     },
     commands: {
       cleanup: commandPlan(
@@ -890,12 +918,23 @@ function buildSshTransportPlan(input: {
     },
     remote_required_commands: REMOTE_REQUIRED_COMMANDS,
     remote_inventory_temp: `/tmp/yuansheng-ys-trace-inventory-${input.runId}`,
-    remote_temp_template: `/tmp/yuansheng-ys-trace-${input.runId}.XXXXXXXX`,
+    remote_temp: `/tmp/yuansheng-ys-trace-${input.runId}`,
     run_id: input.runId,
     session_binding_sha256: sessionBindingSha256,
     sftp: {
-      argv_prefix: [sftp, "-o", "BatchMode=yes", "-b", "-", "--", alias],
+      argv_prefix: [
+        sftp,
+        "-q",
+        "-S",
+        SSH_EXECUTABLE_PLACEHOLDER,
+        ...safeConnectionOptions,
+        "-b",
+        "-",
+        "--",
+        alias,
+      ],
       batch_protocol: "safe-object-id-get-v1",
+      maximum_stdout_bytes: maximumSftpBytes(limits),
     },
   });
   return freezeSnapshot({
@@ -1478,12 +1517,41 @@ function safeObjectId(index: number): string {
 }
 
 function requireRemoteTemp(value: string, runId: string): string {
-  const prefix = `/tmp/yuansheng-ys-trace-${runId}.`;
-  const suffix = value.startsWith(prefix) ? value.slice(prefix.length) : "";
-  if (!/^[A-Za-z0-9]{8}$/u.test(suffix)) {
+  if (value !== `/tmp/yuansheng-ys-trace-${runId}`) {
     fail("snapshot_mismatch", "The remote transport directory is not bound to this run");
   }
   return value;
+}
+
+export function createSshRemoteCleanupLease(
+  plan: SshTransportPlanEnvelope,
+  confirmedInventorySha256: string,
+): SshRemoteCleanupLeaseV1 {
+  requirePlanEnvelope(plan);
+  if (!SHA256.test(confirmedInventorySha256)) {
+    fail("snapshot_mismatch", "The remote cleanup lease requires a confirmed inventory digest");
+  }
+  const remoteTemp = requireRemoteTemp(plan.plan.remote_temp, plan.plan.run_id);
+  const remoteTempBase64 = encoded(remoteTemp);
+  const ownerMarkerSha256 = sha256Hex(
+    joinNulFields(
+      ["YS_TRACE_SSH_OWNER_V1", plan.plan.run_id, remoteTempBase64].map((value) =>
+        UTF8_ENCODER.encode(value),
+      ),
+    ),
+  );
+  return validateSshRemoteCleanupLease(
+    {
+      confirmed_inventory_sha256: confirmedInventorySha256,
+      owner_marker_sha256: ownerMarkerSha256,
+      plan_sha256: plan.plan_sha256,
+      remote_temp: remoteTemp,
+      remote_temp_base64: remoteTempBase64,
+      run_id: plan.plan.run_id,
+    },
+    plan,
+    confirmedInventorySha256,
+  );
 }
 
 export function validateSshRemoteCleanupLease(
@@ -1847,7 +1915,14 @@ function preserveApproval<T extends SshTransportState>(source: SshTransportState
 }
 
 function requireCleanup(value: SshCleanupStatus): SshCleanupStatus {
-  if (value.residual_paths.some((path) => path.length === 0 || path.includes("\0"))) {
+  if (
+    typeof value.local_staging_removed !== "boolean" ||
+    typeof value.remote_temp_removed !== "boolean" ||
+    !Array.isArray(value.residual_paths) ||
+    value.residual_paths.some(
+      (path) => typeof path !== "string" || path.length === 0 || path.includes("\0"),
+    )
+  ) {
     fail("state_invalid", "Cleanup residual paths must be non-empty strings without NUL");
   }
   return freezeSnapshot({
@@ -1962,9 +2037,18 @@ export function transitionSshTransport(
   }
   if (state.phase === "downloading" && event.type === "complete_staging") {
     const mapping = requireMappingEnvelope(event.mapping, state.plan, state.stage);
+    const cleanup = requireCleanup(event.cleanup);
+    if (
+      cleanup.local_staging_removed ||
+      !cleanup.remote_temp_removed ||
+      cleanup.residual_paths.length !== 0
+    ) {
+      fail("cleanup_failed", "The staged snapshot requires a clean remote transport directory");
+    }
     return preserveApproval(
       state,
       freezeSnapshot({
+        cleanup,
         cleanup_lease: state.cleanup_lease,
         inventory: state.inventory,
         mapping,

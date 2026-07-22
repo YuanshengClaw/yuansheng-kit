@@ -14,6 +14,7 @@ const WORKSPACE_ROOT = join(import.meta.dir, "../../..");
 const INVENTORY_TOOL_ID = "ys_trace_inventory_remote_input";
 const REPORT_TOOL_ID = "ys_trace_provide_validation_report";
 const START_TOOL_ID = "ys_trace_start";
+const TRANSFER_TOOL_ID = "ys_trace_transfer_remote_input";
 
 interface RuntimeToolContext {
   readonly abort: AbortSignal;
@@ -209,6 +210,7 @@ test("the formal Yuansheng Trace artifact loads and starts its pre-validator wor
       expect(toolIds).toContain(INVENTORY_TOOL_ID);
       expect(toolIds).toContain(START_TOOL_ID);
       expect(toolIds).toContain(REPORT_TOOL_ID);
+      expect(toolIds).toContain(TRANSFER_TOOL_ID);
     } finally {
       await server.stop();
     }
@@ -221,7 +223,13 @@ test("the formal Yuansheng Trace artifact loads and starts its pre-validator wor
       const startTool = hooks.tool?.[START_TOOL_ID];
       const inventoryTool = hooks.tool?.[INVENTORY_TOOL_ID];
       const reportTool = hooks.tool?.[REPORT_TOOL_ID];
-      if (startTool === undefined || inventoryTool === undefined || reportTool === undefined) {
+      const transferTool = hooks.tool?.[TRANSFER_TOOL_ID];
+      if (
+        startTool === undefined ||
+        inventoryTool === undefined ||
+        reportTool === undefined ||
+        transferTool === undefined
+      ) {
         throw new Error("Installed Yuansheng Trace tools are unavailable");
       }
       const session = runtimeContext(environment, "validation-session");
