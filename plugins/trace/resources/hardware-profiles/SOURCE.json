@@ -1,0 +1,9 @@
+{
+  "asset": "sg2044.json",
+  "source_description": "SG2044 hardware profile from the frozen source repository revision.",
+  "source_revision": "7da376ffb4e994f6200f5a1a1d7d0b4862366ef4",
+  "source_git_blob": "eb7f7c5d513caf9b8e2dc8e33bd3c441c358c96d",
+  "source_sha256": "e55c865f09c0e0ede3248afa6a1a3dc9b8b3187fd3052eb0691633951419029f",
+  "import_method": "byte-for-byte",
+  "license": "Maintainer-authorized material governed by the repository LICENSE."
+}

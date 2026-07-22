@@ -28,6 +28,7 @@
   },
 
   "include": [
+    "plugins/trace/workflows/**/*.ts",
     "plugins/trace/opencode/src/**/*.ts",
     "plugins/trace/opencode/tests/**/*.ts",
     "tests/**/*.ts",

@@ -1,0 +1,77 @@
+{
+  "contract_version": 1,
+  "issues": [],
+  "kind": "perf_data_validation_report",
+  "metadata": {
+    "build_isa": null,
+    "commit_hash": null,
+    "file": null,
+    "issues": [
+      {
+        "code": "metadata_missing",
+        "detail": "No metadata JSON was present at the input root.",
+        "path": null,
+        "severity": "warning"
+      }
+    ],
+    "repository_url": null,
+    "status": "missing",
+    "test_branch": null
+  },
+  "report_status": "usable",
+  "testcases": [
+    {
+      "annotate_directory": "case_zeta/annotate",
+      "annotates": [
+        {
+          "file": {
+            "bytes": "112",
+            "path": "case_zeta/annotate/001-zeta_only-annotate.txt",
+            "sha256": "bbbd87c9bcce166ec1c3c78fc1d6fe71bcaa61959b42f0efadd80ea113b1cd8b"
+          },
+          "function": "zeta_only",
+          "rank": "001"
+        }
+      ],
+      "issues": [],
+      "name": "case_zeta",
+      "perf_stat": {
+        "bytes": "114",
+        "path": "case_zeta/perf-stat.txt",
+        "sha256": "d51f4c3d1c892e4b69e2d613f4932c9ce024c286ad231154add58727f642990a"
+      },
+      "status": "valid"
+    },
+    {
+      "annotate_directory": "case_alpha/annotate",
+      "annotates": [
+        {
+          "file": {
+            "bytes": "113",
+            "path": "case_alpha/annotate/002-alpha_tail-annotate.txt",
+            "sha256": "5c88bde002307d1154fabe918e57a07ac7b25858953335081a30785defb8b1f8"
+          },
+          "function": "alpha_tail",
+          "rank": "002"
+        },
+        {
+          "file": {
+            "bytes": "142",
+            "path": "case_alpha/annotate/001-alpha_head-annotate.txt",
+            "sha256": "064541efe6b2adbbd4350e9ac21c9e67ee7c58ae10cf5d5d915d6460c00b2b1d"
+          },
+          "function": "alpha_head",
+          "rank": "001"
+        }
+      ],
+      "issues": [],
+      "name": "case_alpha",
+      "perf_stat": {
+        "bytes": "115",
+        "path": "case_alpha/perf-stat.txt",
+        "sha256": "e4427cb1cbf78ab609dc48f99348cb882488aca2e3ca91d494ba7c5311bd8ba1"
+      },
+      "status": "valid"
+    }
+  ]
+}

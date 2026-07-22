@@ -1,0 +1,16 @@
+{
+  "vendor": "SOPHGO",
+  "soc": "SG2044",
+  "core_vendor": "T-Head",
+  "core": "XuanTie C920v2",
+  "instruction scheduling method": "out-of-order",
+  "vector": {
+    "flavor": "RVV 1.0",
+    "vlen_bits": 128,
+    "vlenb": 16
+  },
+  "cpuinfo": {
+    "model_name": "T-Head C920v2 (mvendorid=0x5b7, marchid=0x80000000090c0d00)",
+    "isa": "rv64imafdcv_zicbom_zicboz_zicntr_zicond_zicsr_zifencei_zihintntl_zihintpause_zihpm_zawrs_zfa_zfh_zfhmin_zca_zcb_zcd_zba_zbb_zbc_zbs_zve32f_zve32x_zve64d_zve64f_zve64x_zvfh_zvfhmin_sscofpmf_sstc_svinval_svnapot_svpbmt"
+  }
+}
