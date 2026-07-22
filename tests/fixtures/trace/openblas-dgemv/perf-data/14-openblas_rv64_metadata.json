@@ -1,0 +1,11 @@
+{
+  "software_name": "openblas",
+  "repository_url": "https://github.com/OpenMathLib/OpenBLAS.git",
+  "test_branch": "develop",
+  "commit_hash": "992a5362380efd1d4f5f2f490a08b56d9a5b407f",
+  "run_datetime": "2026-07-13T03:52:35.029890",
+  "binaries": {
+    "openblas_bench-elf-A": "Attribute Section: riscv\nFile Attributes\n  Tag_RISCV_stack_align: 16-bytes\n  Tag_RISCV_arch: \"rv64i2p1_m2p0_a2p1_f2p2_d2p2_c2p0_zicsr2p0_zifencei2p0_zmmul1p0_zaamo1p0_zalrsc1p0_zca1p0_zcd1p0\"\n"
+  },
+  "warnings": []
+}

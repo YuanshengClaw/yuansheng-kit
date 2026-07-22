@@ -1,0 +1,4 @@
+SYNTHETIC INTERACTION FIXTURE - NOT PERFORMANCE EVIDENCE
+Percent | Disassembly of alpha_head
+  60.00 : 0000: add a0,a0,a1
+  40.00 : 0004: ret

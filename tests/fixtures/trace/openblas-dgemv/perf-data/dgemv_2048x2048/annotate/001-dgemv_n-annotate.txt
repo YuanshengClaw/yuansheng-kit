@@ -1,0 +1,76 @@
+ Percent |	Source code & Disassembly of libopenblas_riscv64_zvl128bp-r0.3.33.dev.so for cpu-clock (55 samples, percent: local period)
+------------------------------------------------------------------------------------------------------------------------------------------
+         :
+         : 1      /home/yuansheng-ci/workspaces/runs/20260713-run-417-6c8579f0430d/results/perf_record/dgemv_2048x2048/annotate_all/symfs//workspace/install/lib/libopenblas_riscv64_zvl128bp-r0.3.33.dev.so: file format elf64-littleriscv
+         :
+         :
+         : 4      Disassembly of section .text:
+         :
+         : 6      00000000001a2112 <dgemv_n>:
+         : 7      dgemv_n():
+    0.00 :   1a2112: add     sp,sp,-16
+    0.00 :   1a2114: sd      s0,0(sp)
+    0.00 :   1a2116: sd      ra,8(sp)
+    0.00 :   1a2118: add     s0,sp,16
+    0.00 :   1a211a: ld      t5,0(s0)
+    0.00 :   1a211e: bltz    a1,1a2176 <dgemv_n+0x64>
+    0.00 :   1a2122: li      a2,1
+    0.00 :   1a2124: beq     t5,a2,1a2180 <dgemv_n+0x6e>
+    0.00 :   1a2128: blez    a0,1a2176 <dgemv_n+0x64>
+    0.00 :   1a212c: sll     t5,t5,0x3
+    0.00 :   1a212e: sll     t4,a4,0x3
+    0.00 :   1a2132: sll     t3,a6,0x3
+    0.00 :   1a2136: vsetvli t1,a0,e64,m8,ta,ma
+    0.00 :   1a213a: vlse64.v        v8,(a7),t5
+    0.00 :   1a213e: beqz    a1,1a2160 <dgemv_n+0x4e>
+    0.00 :   1a2140: mv      a6,a5
+    0.00 :   1a2142: mv      a2,a3
+    0.00 :   1a2144: li      a4,0
+    0.00 :   1a2146: fld     fa5,0(a6)
+    0.00 :   1a214a: vle64.v v16,(a2)
+    0.00 :   1a214e: add     a4,a4,1
+    0.00 :   1a2150: fmul.d  fa5,fa0,fa5
+    0.00 :   1a2154: add     a6,a6,t3
+    0.00 :   1a2156: add     a2,a2,t4
+    0.00 :   1a2158: vfmacc.vf       v8,fa5,v16
+    0.00 :   1a215c: bne     a1,a4,1a2146 <dgemv_n+0x34>
+    0.00 :   1a2160: mul     a4,t5,t1
+    0.00 :   1a2164: vsse64.v        v8,(a7),t5
+    0.00 :   1a2168: sub     a0,a0,t1
+    0.00 :   1a216c: sll     t1,t1,0x3
+    0.00 :   1a216e: add     a3,a3,t1
+    0.00 :   1a2170: add     a7,a7,a4
+    0.00 :   1a2172: bgtz    a0,1a2136 <dgemv_n+0x24>
+    0.00 :   1a2176: ld      ra,8(sp)
+    0.00 :   1a2178: ld      s0,0(sp)
+    0.00 :   1a217a: li      a0,0
+    0.00 :   1a217c: add     sp,sp,16
+    0.00 :   1a217e: ret
+    0.00 :   1a2180: blez    a0,1a2176 <dgemv_n+0x64>
+    0.00 :   1a2184: sll     t3,a4,0x3
+    0.00 :   1a2188: sll     t1,a6,0x3
+    0.00 :   1a218c: vsetvli t4,a0,e64,m8,ta,ma
+    0.00 :   1a2190: vle64.v v8,(a7)
+    0.00 :   1a2194: beqz    a1,1a21b6 <dgemv_n+0xa4>
+    0.00 :   1a2196: mv      a6,a5
+    0.00 :   1a2198: mv      a2,a3
+    0.00 :   1a219a: li      a4,0
+    0.00 :   1a219c: fld     fa5,0(a6)
+    0.00 :   1a21a0: vle64.v v16,(a2)
+  100.00 :   1a21a4: add     a4,a4,1
+    0.00 :   1a21a6: fmul.d  fa5,fa0,fa5
+    0.00 :   1a21aa: add     a6,a6,t1
+    0.00 :   1a21ac: add     a2,a2,t3
+    0.00 :   1a21ae: vfmacc.vf       v8,fa5,v16
+    0.00 :   1a21b2: bne     a1,a4,1a219c <dgemv_n+0x8a>
+    0.00 :   1a21b6: vse64.v v8,(a7)
+    0.00 :   1a21ba: sub     a0,a0,t4
+    0.00 :   1a21be: sll     t4,t4,0x3
+    0.00 :   1a21c0: add     a7,a7,t4
+    0.00 :   1a21c2: add     a3,a3,t4
+    0.00 :   1a21c4: bgtz    a0,1a218c <dgemv_n+0x7a>
+    0.00 :   1a21c8: ld      ra,8(sp)
+    0.00 :   1a21ca: ld      s0,0(sp)
+    0.00 :   1a21cc: li      a0,0
+    0.00 :   1a21ce: add     sp,sp,16
+    0.00 :   1a21d0: ret

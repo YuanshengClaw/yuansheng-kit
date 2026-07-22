@@ -1,0 +1,4 @@
+SYNTHETIC INTERACTION FIXTURE - NOT PERFORMANCE EVIDENCE
+test_case: case_zeta
+duration_time: 300
+instruction: 400

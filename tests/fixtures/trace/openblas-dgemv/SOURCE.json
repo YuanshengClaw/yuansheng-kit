@@ -1,0 +1,67 @@
+{
+  "source": {
+    "repository": "https://github.com/YuanshengClaw/anomalous-test-cases.git",
+    "commit": "566c11cf3792c638f63912a8662f014b64072e82",
+    "dataset_license_declared_at_source": false,
+    "redistribution_basis": "Maintainer-authorized internal migration under the repository root LICENSE",
+    "license_file": "../../../../LICENSE"
+  },
+  "embedded_upstream": {
+    "project": "OpenBLAS",
+    "repository": "https://github.com/OpenMathLib/OpenBLAS.git",
+    "commit": "992a5362380efd1d4f5f2f490a08b56d9a5b407f",
+    "license": "BSD-3-Clause",
+    "license_url": "https://raw.githubusercontent.com/OpenMathLib/OpenBLAS/992a5362380efd1d4f5f2f490a08b56d9a5b407f/LICENSE",
+    "source_license_bytes": 1548,
+    "source_license_sha256": "190b5a9c8d9723fe958ad33916bd7346d96fab3c5ea90832bb02d854f620fcff",
+    "fixture_license_path": "OPENBLAS-LICENSE.txt",
+    "fixture_license_bytes": 1545,
+    "fixture_license_sha256": "fc239da73616d04dce1663d9f789bc822221d7df6a25e4139082d1802af8b1e9",
+    "license_normalization": "Removed three trailing ASCII spaces; license wording is unchanged."
+  },
+  "crop": {
+    "included_test_cases": ["dgemv_2048x2048"],
+    "included_hotspots": ["001-dgemv_n"],
+    "excluded": [
+      "Every other test case",
+      "Annotate ranks 002 through 009",
+      "Raw perf data, perf reports, test output, and case-local metadata",
+      "Selection tables and archived result sets"
+    ],
+    "perf_stat_note": "The source file is a real CSV-derived perf-stat summary, not native perf stat stdout."
+  },
+  "files": [
+    {
+      "fixture_path": "perf-data/14-openblas_rv64_metadata.json",
+      "fixture_bytes": 506,
+      "fixture_sha256": "bae284f21a62998e1b93fa41e7e8cc233ac8701117f1b3d2cbcdbfac93c4c75d",
+      "source_path": "metadata/14-openblas_rv64_metadata.json",
+      "source_bytes": 1539,
+      "source_sha256": "15e036e49850da3e77fb2d43ca2a8f6ac042ef1d4fca9b9e3cf8dda0fd6b5d4a",
+      "transformations": [
+        "Removed the localized binaries.openblas_bench-elf-h readelf rendering",
+        "Retained repository, revision, run time, RISC-V attributes, and warnings"
+      ]
+    },
+    {
+      "fixture_path": "perf-data/dgemv_2048x2048/14-openblas-benchmark-riscv-dgemv_2048x2048.txt",
+      "fixture_bytes": 2015,
+      "fixture_sha256": "03f50a1c0a3766ee1b62901d688faa959acff30e60ddbb60a1063d8243e882a0",
+      "source_path": "anomalous-perf-annotate-result/14-openblas_rv64/dgemv_2048x2048/14-openblas-benchmark-riscv-dgemv_2048x2048.txt",
+      "source_bytes": 2015,
+      "source_sha256": "03f50a1c0a3766ee1b62901d688faa959acff30e60ddbb60a1063d8243e882a0",
+      "transformations": []
+    },
+    {
+      "fixture_path": "perf-data/dgemv_2048x2048/annotate/001-dgemv_n-annotate.txt",
+      "fixture_bytes": 3367,
+      "fixture_sha256": "1e42a9afcc5bac0348f0075e587efa0dc9297bc0b568e1cb83dd61d0d33ff6f3",
+      "source_path": "anomalous-perf-annotate-result/14-openblas_rv64/dgemv_2048x2048/annotate/001-dgemv_n-annotate.txt",
+      "source_bytes": 3374,
+      "source_sha256": "17810fea682a48be633f0414d925bb5dd66e22152df251720605714bf1491b1d",
+      "transformations": [
+        "Translated the localized file-format label to English, replaced its full-width separator, and normalized adjacent spacing"
+      ]
+    }
+  ]
+}

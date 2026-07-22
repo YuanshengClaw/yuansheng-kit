@@ -1,0 +1,3 @@
+SYNTHETIC INTERACTION FIXTURE - NOT PERFORMANCE EVIDENCE
+Percent | Disassembly of alpha_tail
+ 100.00 : 0000: ret

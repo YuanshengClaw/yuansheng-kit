@@ -1,0 +1,77 @@
+{
+  "fixture_kind": "synthetic_trace_interaction",
+  "performance_evidence": false,
+  "notice": "All measurements and disassembly in this fixture are synthetic and must not be used as performance evidence.",
+  "perf_data_root": "perf-data",
+  "fixture_inventory": [
+    {
+      "test_case": "case_zeta",
+      "functions": [{ "rank": "001", "function": "zeta_only" }]
+    },
+    {
+      "test_case": "case_alpha",
+      "functions": [
+        { "rank": "002", "function": "alpha_tail" },
+        { "rank": "001", "function": "alpha_head" }
+      ]
+    }
+  ],
+  "expected_stable_order": [
+    "case_alpha/001_alpha_head",
+    "case_alpha/002_alpha_tail",
+    "case_zeta/001_zeta_only"
+  ],
+  "scenarios": [
+    {
+      "id": "single",
+      "selection": "case_zeta",
+      "expected_completed": ["case_zeta/001_zeta_only"]
+    },
+    {
+      "id": "all",
+      "selection": "all",
+      "expected_completed": [
+        "case_alpha/001_alpha_head",
+        "case_alpha/002_alpha_tail",
+        "case_zeta/001_zeta_only"
+      ]
+    },
+    {
+      "id": "stable-order",
+      "selection": "all",
+      "expected_order": [
+        "case_alpha/001_alpha_head",
+        "case_alpha/002_alpha_tail",
+        "case_zeta/001_zeta_only"
+      ]
+    },
+    {
+      "id": "continue",
+      "selection": "case_alpha",
+      "decisions": [{ "after": "case_alpha/001_alpha_head", "reply": "continue" }],
+      "expected_completed": ["case_alpha/001_alpha_head", "case_alpha/002_alpha_tail"]
+    },
+    {
+      "id": "stop",
+      "selection": "all",
+      "decisions": [{ "after": "case_alpha/001_alpha_head", "reply": "stop" }],
+      "expected_completed": ["case_alpha/001_alpha_head", "case_zeta/001_zeta_only"],
+      "expected_skipped_in_current_test_case": ["case_alpha/002_alpha_tail"],
+      "expected_outcome": "current_test_case_stopped_then_next_test_case_continued"
+    },
+    {
+      "id": "conflict",
+      "selection": "case_zeta",
+      "preexisting_artifact": "case_zeta/001_zeta_only",
+      "expected_outcome": "artifact_conflict",
+      "must_preserve_preexisting_artifact": true
+    },
+    {
+      "id": "failure",
+      "selection": "case_zeta",
+      "injected_failure_at": "case_zeta/001_zeta_only",
+      "expected_outcome": "failed_record_only",
+      "must_not_publish_blueprint": true
+    }
+  ]
+}

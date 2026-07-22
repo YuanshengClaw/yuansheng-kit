@@ -1,0 +1,113 @@
+{
+  "request": {
+    "model": "yuansheng-trace-fixture",
+    "stream": true,
+    "messages": [
+      {
+        "role": "system",
+        "content": "Return only a RootCauseBlueprint v1-lite JSON object."
+      },
+      {
+        "role": "user",
+        "content": "Analyze OpenBLAS dgemv_2048x2048 function dgemv_n using the supplied fixture evidence."
+      }
+    ]
+  },
+  "assistant": {
+    "meta": {
+      "title": "Yuansheng Trace Root Cause Diagnosis Report Lite",
+      "report_type": "performance_root_cause",
+      "report_version": "v1-lite",
+      "primary_consumers": ["human_reviewer", "agent4_optimizer"]
+    },
+    "section1_basic_info": {
+      "diagnosis_id": "diag-openblas-dgemv-001",
+      "software": "openblas",
+      "target_hardware": "RV64 target; the exact hardware model is unavailable",
+      "repository_url": "https://github.com/OpenMathLib/OpenBLAS.git",
+      "test_branch": "develop",
+      "commit_hash": "992a5362380efd1d4f5f2f490a08b56d9a5b407f",
+      "spec_baseline": null,
+      "overall_status": "insufficient_evidence",
+      "overall_confidence": 0.35
+    },
+    "section2_summary": {
+      "anomaly_conclusion": "The retained RV64 evidence identifies dgemv_n as the rank 001 hotspot, with IPC 0.333535 and 55 annotate samples, but it has no AArch64 baseline.",
+      "affected_target": "RV64 / dgemv_2048x2048",
+      "most_likely_root_cause": null,
+      "recommend_to_agent4": "no"
+    },
+    "section3_key_evidence": {
+      "3_1_metric_evidence": [
+        {
+          "metric": "duration_time (ns)",
+          "rv": 178437499,
+          "arm": null,
+          "anomaly_note": "The recorded RV64 summary reports 178437499 ns; no comparable AArch64 value is present."
+        },
+        {
+          "metric": "IPC",
+          "rv": 0.333535,
+          "arm": null,
+          "anomaly_note": "The recorded RV64 summary reports IPC 0.333535; no comparable AArch64 value is present."
+        },
+        {
+          "metric": "LLC load miss rate (%)",
+          "rv": 82.031,
+          "arm": null,
+          "anomaly_note": "The recorded RV64 summary reports an LLC load miss rate of 82.031%; no comparable AArch64 value is present."
+        }
+      ],
+      "3_2_hotspot_evidence": [
+        {
+          "hotspot_function": "dgemv_n",
+          "file_module": "libopenblas_riscv64_zvl128bp-r0.3.33.dev.so",
+          "rvv_pattern": null,
+          "pattern_confidence": null,
+          "benefit_upperbound": null,
+          "note": "The retained annotate file contains 55 samples and attributes all local samples to one loop-counter instruction; this identifies the function but is not enough to isolate the underlying bottleneck."
+        }
+      ],
+      "3_3_code_knowledge_evidence": {
+        "related_code_location": null,
+        "related_knowledge": null,
+        "evidence_explanation": "The fixture contains disassembly and metrics but no traceable source location, source-code evidence, or Pattern catalog."
+      }
+    },
+    "section4_root_cause": {
+      "most_likely_root_cause": null,
+      "root_cause_type": "unknown",
+      "reasoning": "Low IPC, a high LLC load miss rate, and concentration in dgemv_n justify further investigation, but the small annotate sample and missing cross-architecture baseline do not distinguish memory pressure, sampling attribution, or another cause.",
+      "alternative_explanations": [
+        "The annotate attribution may place samples on the loop-counter instruction even when nearby vector loads or arithmetic dominate execution time.",
+        "The observed metrics may reflect system or collection conditions rather than a stable implementation bottleneck."
+      ]
+    },
+    "section5_risks_and_gaps": {
+      "current_gaps": [
+        "pattern_catalog_unavailable",
+        "duration_data_unavailable",
+        "aarch64_baseline_unavailable",
+        "source_location_unavailable",
+        "code_knowledge_unavailable",
+        "hardware_profile_unavailable",
+        "annotate_sample_size_limited"
+      ],
+      "risk_level": "high",
+      "needs_human_review": true,
+      "human_review_focus": "Confirm the target hardware, collect a same-version AArch64 baseline and more samples, then map dgemv_n to reviewed source before selecting an optimization."
+    },
+    "section6_agent4_actions": {
+      "proceed_to_optimization": "no",
+      "priority_location": "dgemv_n",
+      "recommended_first_action": "Collect a larger annotate sample and a same-version AArch64 comparison, then have a human review the evidenced dgemv_n loop.",
+      "recommended_verification": "Repeat the same benchmark with controlled inputs and compare duration, throughput, IPC, cache behavior, and annotate distribution across RV64 and AArch64.",
+      "change_risk": "high"
+    },
+    "section7_final_verdict": {
+      "final_status": "insufficient_evidence",
+      "allow_auto_forward_to_agent4": false,
+      "block_reason": "The evidence lacks an AArch64 baseline, target hardware identity, source mapping, Pattern catalog, and enough annotate samples for an optimization handoff."
+    }
+  }
+}

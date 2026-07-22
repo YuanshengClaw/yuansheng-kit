@@ -1,0 +1,65 @@
+14-OPENBLAS-BENCHMARK dgemv_2048x2048 RISC-V perf stat
+======================================================
+
+Source CSV: /workspace/results/14-openblas-benchmark_results.csv
+TestName: dgemv_2048x2048
+Architecture column: PerformanceValue
+
+Raw perf stat metrics
+---------------------
+| Metric | RISC-V value |
+|---|---:|
+| duration_time | 178,437,499 |
+| task_clock | 698.8800000000 |
+| cpu_cycle | 1,816,602,679 |
+| instruction | 605,901,094 |
+| cache_references | 40,226,828 |
+| cache_misses | 40,226,952 |
+| branches | 66,327,622 |
+| branch_misses | 79,090 |
+| L1_dcache_loads | 131,352,149 |
+| L1_dcache_load_misses | 4,878,835 |
+| LLC_load_misses | 32,999,193 |
+| LLC_loads | 40,227,511 |
+| IPC | 0.3335350000 |
+| benchmark_ms | 81.5150639974 |
+| gflops | 0.8232694757 |
+| gbps | 3.2979017475 |
+| checksum | 2,857.1678878500 |
+| threads | 4 |
+
+Derived metrics
+---------------
+| Metric | Value |
+|---|---:|
+| duration_s | 0.178437 |
+| cache_miss_rate | 100.000% |
+| branch_miss_rate | 0.119% |
+| L1_dcache_load_miss_rate | 3.714% |
+| LLC_load_miss_rate | 82.031% |
+
+perf stat style summary
+-----------------------
+             178,437,499  duration_time
+          698.8800000000  task_clock
+           1,816,602,679  cpu_cycle
+             605,901,094  instruction
+              40,226,828  cache_references
+              40,226,952  cache_misses
+              66,327,622  branches
+                  79,090  branch_misses
+             131,352,149  L1_dcache_loads
+               4,878,835  L1_dcache_load_misses
+              32,999,193  LLC_load_misses
+              40,227,511  LLC_loads
+            0.3335350000  IPC
+           81.5150639974  benchmark_ms
+            0.8232694757  gflops
+            3.2979017475  gbps
+        2,857.1678878500  checksum
+                       4  threads
+                0.178437  duration_s
+                100.000%  cache_miss_rate
+                  0.119%  branch_miss_rate
+                  3.714%  L1_dcache_load_miss_rate
+                 82.031%  LLC_load_miss_rate
