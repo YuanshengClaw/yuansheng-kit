@@ -2,6 +2,7 @@ import { isAbsolute, relative, resolve } from "node:path";
 import { SourceTextModule } from "node:vm";
 
 import { type ArtifactOutputFile, commitArtifact } from "./artifact";
+import { expandBunBundleOutput } from "./bun-bundle";
 import { PLUGIN_BUILDER_BUN_VERSION } from "./cli-contract";
 import { PluginBuilderError } from "./errors";
 import { canonicalJson, sha256Hex } from "./json";
@@ -246,10 +247,12 @@ function expandGeneratedOutput(output: Record<string, unknown>): readonly Artifa
   return [{ bytes: Uint8Array.from(output.bytes), mode: output.mode, path: output.path }];
 }
 
-function expandPlan(
+async function expandPlan(
   plan: PlatformAssemblyPlanV1,
   snapshots: ReadonlyMap<string, SourceResourceSnapshot>,
-): readonly ArtifactOutputFile[] {
+  workspace: WorkspaceReader,
+  bunLockBytes: Uint8Array,
+): Promise<readonly ArtifactOutputFile[]> {
   if (!isRecord(plan) || !Array.isArray(plan.outputs) || Object.keys(plan).length !== 1) {
     throw new PluginBuilderError(
       "handler-contract-invalid",
@@ -261,7 +264,9 @@ function expandPlan(
   for (const candidate of plan.outputs as readonly unknown[]) {
     if (
       !isRecord(candidate) ||
-      (candidate.type !== "copy-resource" && candidate.type !== "generated-file")
+      (candidate.type !== "bun-bundle" &&
+        candidate.type !== "copy-resource" &&
+        candidate.type !== "generated-file")
     ) {
       throw new PluginBuilderError(
         "handler-contract-invalid",
@@ -269,11 +274,13 @@ function expandPlan(
         "Platform handler returned an unknown output type",
       );
     }
-    files.push(
-      ...(candidate.type === "copy-resource"
-        ? expandCopyOutput(candidate, snapshots)
-        : expandGeneratedOutput(candidate)),
-    );
+    if (candidate.type === "copy-resource") {
+      files.push(...expandCopyOutput(candidate, snapshots));
+    } else if (candidate.type === "generated-file") {
+      files.push(...expandGeneratedOutput(candidate));
+    } else {
+      files.push(await expandBunBundleOutput(candidate, snapshots, workspace, bunLockBytes));
+    }
   }
   return files;
 }
@@ -337,7 +344,7 @@ async function buildPluginWithWorkspace(
     handlerFile.sha256,
   );
   const plan = await runHandler(handler, assembly);
-  const files = expandPlan(plan, snapshots);
+  const files = await expandPlan(plan, snapshots, workspace, buildDefinition.bunLockBytes);
   await verifyResourceSources(workspace, snapshots);
 
   const outputPath = resolveOutputPath(workspaceRoot, options.outputPath, [

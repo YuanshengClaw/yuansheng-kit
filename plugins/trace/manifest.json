@@ -55,9 +55,20 @@
       "source": {
         "kind": "file",
         "path": "plugins/trace/opencode/package.json",
-        "sha256": "59759a6b95bcffc20f22d60ed1aff6c0dd6ba8372b713274a215e295d8ff3836"
+        "sha256": "39f201d454a6ab84fea8493bf33f2ef2534dc94c9a193fd71a2463f556b220bb"
       },
       "requires": []
+    },
+    {
+      "id": "opencode-runtime-entry",
+      "kind": "platform-runtime",
+      "logical_path": "opencode/src/index.ts",
+      "source": {
+        "kind": "file",
+        "path": "plugins/trace/opencode/src/index.ts",
+        "sha256": "cbd96664277ec5a91628b4622365660b44f58303c4c7423d61a8b9c5b0a4fb86"
+      },
+      "requires": ["hardware-profile", "trace-workflow"]
     },
     {
       "id": "opencode-platform-handler",
@@ -66,24 +77,14 @@
       "source": {
         "kind": "file",
         "path": "plugins/trace/opencode/src/platform-handler.ts",
-        "sha256": "7bceabc4c04fba6e48d5c7b9a64b9e7f17f6006b002b6861e3198b717f4af677"
+        "sha256": "d3cc3cf30b8362c1393645355b1b8c17cc3db97d2d728d3984c58c3ed9ab9d51"
       },
       "requires": [
-        "artifact-transaction",
-        "blueprint-pipeline",
-        "hardware-profile",
         "opencode-package",
-        "perf-data-validation-report",
-        "perf-data-validation-report-schema",
-        "root-cause-blueprint-type",
-        "root-cause-blueprint-validator",
-        "root-cause-canonical-json",
-        "root-cause-semantic-rules",
-        "root-cause-strict-json",
+        "opencode-runtime-entry",
         "sg2044-hardware-profile",
         "trace-agent",
         "trace-command",
-        "trace-workflow",
         "write-root-cause-blueprint-skill"
       ]
     },
@@ -164,7 +165,7 @@
       "source": {
         "kind": "file",
         "path": "tools/yuansheng-root-cause-blueprint/src/strict-json.ts",
-        "sha256": "84b7443068d4937a4a836c8bf5d07437668f1b10f49ff4b5771431f52d474d09"
+        "sha256": "01e6f4f32d4b0c6fcc6d64892339a12cf0c232565067b3a251f3328476e27b0e"
       },
       "requires": []
     },
@@ -258,54 +259,6 @@
           {
             "resource": "sg2044-hardware-profile",
             "destination": ".opencode/yuansheng/resources/hardware-profiles/sg2044.json"
-          },
-          {
-            "resource": "artifact-transaction",
-            "destination": ".opencode/yuansheng/sources/plugins/trace/workflows/artifact-transaction.ts"
-          },
-          {
-            "resource": "blueprint-pipeline",
-            "destination": ".opencode/yuansheng/sources/plugins/trace/workflows/blueprint-pipeline.ts"
-          },
-          {
-            "resource": "hardware-profile",
-            "destination": ".opencode/yuansheng/sources/plugins/trace/workflows/hardware-profile.ts"
-          },
-          {
-            "resource": "perf-data-validation-report",
-            "destination": ".opencode/yuansheng/sources/plugins/trace/workflows/perf-data-validation-report.ts"
-          },
-          {
-            "resource": "perf-data-validation-report-schema",
-            "destination": ".opencode/yuansheng/sources/plugins/trace/workflows/perf-data-validation-report-v1.schema.json"
-          },
-          {
-            "resource": "trace-workflow",
-            "destination": ".opencode/yuansheng/sources/plugins/trace/workflows/trace-workflow.ts"
-          },
-          {
-            "resource": "root-cause-canonical-json",
-            "destination": ".opencode/yuansheng/sources/tools/yuansheng-root-cause-blueprint/src/canonical-json.ts"
-          },
-          {
-            "resource": "root-cause-strict-json",
-            "destination": ".opencode/yuansheng/sources/tools/yuansheng-root-cause-blueprint/src/strict-json.ts"
-          },
-          {
-            "resource": "root-cause-semantic-rules",
-            "destination": ".opencode/yuansheng/sources/tools/yuansheng-root-cause-blueprint/src/semantic-rules.ts"
-          },
-          {
-            "resource": "root-cause-blueprint-validator",
-            "destination": ".opencode/yuansheng/sources/tools/yuansheng-root-cause-blueprint/src/generated/validators.ts"
-          },
-          {
-            "resource": "root-cause-blueprint-type",
-            "destination": ".opencode/yuansheng/sources/tools/yuansheng-root-cause-blueprint/src/generated/types/yuansheng-root-cause-blueprint-v1-lite.ts"
-          },
-          {
-            "resource": "opencode-package",
-            "destination": "package.json"
           }
         ],
         "permissions": {
@@ -315,7 +268,16 @@
           "skill": "allow",
           "webfetch": "deny",
           "websearch": "deny",
-          "write": "deny"
+          "write": "deny",
+          "ys_trace_start": "allow"
+        },
+        "runtime": {
+          "bundle_sha256": "124023496b79f29c39662e5d48d168498b8ddf2c957e68c4db40a7087c728e40",
+          "destination": ".opencode/plugins/ys-trace.js",
+          "entrypoint_resource": "opencode-runtime-entry",
+          "external": ["node:crypto", "node:fs/promises", "node:path"],
+          "package_resource": "opencode-package",
+          "tool": "ys_trace_start"
         },
         "artifact_root": {
           "default_relative_path": ".opencode/yuansheng/blueprint",

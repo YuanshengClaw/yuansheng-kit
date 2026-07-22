@@ -56,6 +56,18 @@ export interface ProbeEnvironment {
   startServer(): Promise<ProbeServer>;
 }
 
+export interface InstalledArtifactEnvironment {
+  readonly expectedVersion: string;
+  readonly opencodeDirectory: string;
+  readonly projectDirectory: string;
+  readonly root: string;
+  cleanup(): Promise<void>;
+  inventory(): Promise<Readonly<Record<string, string>>>;
+  packageCacheInventory(): Promise<Readonly<Record<string, string>>>;
+  run(label: string, args: readonly string[], timeoutMs?: number): Promise<CommandResult>;
+  startServer(): Promise<ProbeServer>;
+}
+
 interface LocalProvider {
   readonly baseUrl: string;
   readonly requests: ProviderRequest[];
@@ -611,6 +623,24 @@ function openCodeConfig(providerBaseUrl: string): string {
   });
 }
 
+function installedArtifactOpenCodeConfig(): string {
+  return JSON.stringify({
+    autoupdate: false,
+    formatter: false,
+    lsp: false,
+    share: "disabled",
+    snapshot: false,
+  });
+}
+
+function definedProcessEnvironment(): Record<string, string> {
+  return Object.fromEntries(
+    Object.entries(process.env).filter(
+      (entry): entry is [string, string] => entry[1] !== undefined,
+    ),
+  );
+}
+
 export function parseJson(text: string): unknown {
   return JSON.parse(text);
 }
@@ -740,6 +770,172 @@ export async function createProbeEnvironment(): Promise<ProbeEnvironment> {
       const evidenceName = `${basename(label)}.json`;
       await writeEvidence(
         join(evidenceDirectory, evidenceName),
+        {
+          label,
+          result: {
+            args: result.args,
+            exitCode: result.exitCode,
+            stderr: result.stderr,
+            stdout: result.stdout,
+            timedOut: result.timedOut,
+          },
+        },
+        root,
+      );
+      return result;
+    },
+    startServer() {
+      return startProbeServer({
+        cwd: projectDirectory,
+        env: environment,
+        evidenceDirectory,
+        executable,
+        normalizationRoot: root,
+      });
+    },
+  };
+}
+
+export async function createInstalledArtifactEnvironment(
+  workspaceRoot: string,
+): Promise<InstalledArtifactEnvironment> {
+  const executable = await realpath(toolPath());
+  const root = await mkdtemp(join(tmpdir(), "yuansheng-opencode-artifact-"));
+  const homeDirectory = join(root, "home");
+  const xdgConfigDirectory = join(root, "xdg-config");
+  const xdgDataDirectory = join(root, "xdg-data");
+  const xdgStateDirectory = join(root, "xdg-state");
+  const xdgCacheDirectory = join(root, "xdg-cache");
+  const bunInstallCacheDirectory = join(xdgCacheDirectory, "bun");
+  const npmCacheDirectory = join(xdgCacheDirectory, "npm");
+  const temporaryDirectory = join(root, "tmp");
+  const evidenceDirectory = join(root, "evidence");
+  const projectDirectory = join(root, "project");
+  const artifactDirectory = join(root, "artifact");
+  const globalConfigDirectory = join(xdgConfigDirectory, "opencode");
+  const opencodeDirectory = join(projectDirectory, ".opencode");
+  const directories = [
+    homeDirectory,
+    xdgConfigDirectory,
+    xdgDataDirectory,
+    xdgStateDirectory,
+    xdgCacheDirectory,
+    bunInstallCacheDirectory,
+    npmCacheDirectory,
+    temporaryDirectory,
+    evidenceDirectory,
+    projectDirectory,
+    globalConfigDirectory,
+  ];
+  try {
+    await Promise.all(directories.map((directory) => mkdir(directory, { recursive: true })));
+    const build = await spawnCommand(
+      [
+        process.execPath,
+        "run",
+        "plugin-builder",
+        "--",
+        "build",
+        "--workspace-root",
+        ".",
+        "--manifest",
+        "plugins/trace/manifest.json",
+        "--platform",
+        "opencode",
+        "--output",
+        artifactDirectory,
+      ],
+      {
+        cwd: workspaceRoot,
+        env: definedProcessEnvironment(),
+      },
+    );
+    if (build.exitCode !== 0 || build.timedOut) {
+      throw new Error(
+        `Formal plugin build failed (exit ${build.exitCode})\n${build.stdout}\n${build.stderr}`,
+      );
+    }
+    await cp(join(artifactDirectory, ".opencode"), opencodeDirectory, { recursive: true });
+    await initializeGit(projectDirectory, homeDirectory);
+    await makeDirectoryReadOnly(opencodeDirectory);
+    await makeDirectoryReadOnly(globalConfigDirectory);
+  } catch (error) {
+    await makeDirectoryWritable(opencodeDirectory);
+    await makeDirectoryWritable(globalConfigDirectory);
+    await rm(root, { force: true, recursive: true });
+    throw error;
+  }
+
+  const environment: Record<string, string> = {
+    ALL_PROXY: "http://127.0.0.1:1",
+    BUN_CONFIG_REGISTRY: "http://127.0.0.1:1",
+    BUN_INSTALL_CACHE_DIR: bunInstallCacheDirectory,
+    GIT_CONFIG_GLOBAL: "/dev/null",
+    GIT_CONFIG_NOSYSTEM: "1",
+    GIT_OPTIONAL_LOCKS: "0",
+    HOME: homeDirectory,
+    HTTPS_PROXY: "http://127.0.0.1:1",
+    HTTP_PROXY: "http://127.0.0.1:1",
+    LANG: "C.UTF-8",
+    LC_ALL: "C.UTF-8",
+    NO_COLOR: "1",
+    NO_PROXY: "127.0.0.1,localhost",
+    NPM_CONFIG_CACHE: npmCacheDirectory,
+    NPM_CONFIG_REGISTRY: "http://127.0.0.1:1",
+    OPENCODE_AUTH_CONTENT: "{}",
+    OPENCODE_CONFIG_CONTENT: installedArtifactOpenCodeConfig(),
+    OPENCODE_DISABLE_AUTOCOMPACT: "1",
+    OPENCODE_DISABLE_AUTOUPDATE: "1",
+    OPENCODE_DISABLE_CLAUDE_CODE: "1",
+    OPENCODE_DISABLE_DEFAULT_PLUGINS: "1",
+    OPENCODE_DISABLE_EXTERNAL_SKILLS: "1",
+    OPENCODE_DISABLE_LSP_DOWNLOAD: "1",
+    OPENCODE_DISABLE_MODELS_FETCH: "1",
+    OPENCODE_DISABLE_SHARE: "1",
+    OPENCODE_PLUGIN_META_FILE: join(xdgStateDirectory, "plugin-meta.json"),
+    PATH: process.env.PATH ?? "",
+    TERM: "dumb",
+    TMPDIR: temporaryDirectory,
+    XDG_CACHE_HOME: xdgCacheDirectory,
+    XDG_CONFIG_HOME: xdgConfigDirectory,
+    XDG_DATA_HOME: xdgDataDirectory,
+    XDG_STATE_HOME: xdgStateDirectory,
+    all_proxy: "http://127.0.0.1:1",
+    http_proxy: "http://127.0.0.1:1",
+    https_proxy: "http://127.0.0.1:1",
+    no_proxy: "127.0.0.1,localhost",
+  };
+  return {
+    expectedVersion: DEFAULT_EXPECTED_VERSION,
+    opencodeDirectory,
+    projectDirectory,
+    root,
+    async cleanup() {
+      await makeDirectoryWritable(opencodeDirectory);
+      await makeDirectoryWritable(globalConfigDirectory);
+      await rm(root, { force: true, recursive: true });
+    },
+    inventory() {
+      return directoryInventory(opencodeDirectory);
+    },
+    async packageCacheInventory() {
+      const [bunCache, npmCache] = await Promise.all([
+        directoryInventory(bunInstallCacheDirectory),
+        directoryInventory(npmCacheDirectory),
+      ]);
+      return Object.fromEntries([
+        ...Object.entries(bunCache).map(([path, value]) => [`bun/${path}`, value]),
+        ...Object.entries(npmCache).map(([path, value]) => [`npm/${path}`, value]),
+      ]);
+    },
+    async run(label, args, timeoutMs) {
+      const result = await spawnCommand([executable, ...args], {
+        cwd: projectDirectory,
+        env: environment,
+        ...(timeoutMs === undefined ? {} : { timeoutMs }),
+      });
+      await writeEvidence(
+        join(evidenceDirectory, `${basename(label)}.json`),
         {
           label,
           result: {

@@ -9,6 +9,9 @@ import type {
 const UTF8_DECODER = new TextDecoder("utf-8", { fatal: true });
 const UTF8_ENCODER = new TextEncoder();
 const SAFE_IDENTIFIER = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/u;
+const SAFE_PERMISSION_NAME = /^[a-z][a-z0-9_]*$/u;
+const SAFE_PACKAGE_NAME = /^(?:@[a-z0-9][a-z0-9._-]*\/)?[a-z0-9][a-z0-9._-]*$/u;
+const SAFE_NODE_BUILTIN = /^node:[a-z0-9][a-z0-9/_-]*$/u;
 const SAFE_DESTINATION =
   /^(?!\/)(?![A-Za-z]:)(?!.*(?:^|\/)(?:\.|\.\.)(?:\/|$))(?!.*\/\/)(?!.*\\).+$/u;
 const EXPECTED_PLUGIN_ID = "trace";
@@ -45,12 +48,22 @@ interface ArtifactRootConfiguration {
   readonly requiresResolvedAbsolutePath: true;
 }
 
+interface RuntimeConfiguration {
+  readonly bundleSha256: string;
+  readonly destination: string;
+  readonly entrypointResource: string;
+  readonly external: readonly string[];
+  readonly packageResource: string;
+  readonly tool: string;
+}
+
 interface OpenCodeConfiguration {
   readonly agent: AgentConfiguration;
   readonly artifactRoot: ArtifactRootConfiguration;
   readonly command: CommandConfiguration;
   readonly copies: readonly CopyConfiguration[];
   readonly permissions: Readonly<Record<string, PermissionAction>>;
+  readonly runtime: RuntimeConfiguration;
 }
 
 function fail(message: string): never {
@@ -210,7 +223,7 @@ function parsePermissions(value: unknown): Readonly<Record<string, PermissionAct
   }
   const parsed: Record<string, PermissionAction> = {};
   for (const name of Object.keys(permissions).sort()) {
-    if (!SAFE_IDENTIFIER.test(name)) {
+    if (!SAFE_PERMISSION_NAME.test(name)) {
       fail(`permission name ${JSON.stringify(name)} is invalid`);
     }
     const action = permissions[name];
@@ -220,6 +233,59 @@ function parsePermissions(value: unknown): Readonly<Record<string, PermissionAct
     parsed[name] = action;
   }
   return Object.freeze(parsed);
+}
+
+function requireUniqueStringArray(
+  value: unknown,
+  label: string,
+  pattern: RegExp,
+): readonly string[] {
+  if (!Array.isArray(value) || value.length === 0) {
+    fail(`${label} must be a non-empty array`);
+  }
+  const parsed = value.map((item, index) => {
+    const text = requireString(item, `${label}[${index}]`);
+    if (!pattern.test(text)) {
+      fail(`${label}[${index}] is invalid`);
+    }
+    return text;
+  });
+  if (new Set(parsed).size !== parsed.length) {
+    fail(`${label} must not contain duplicates`);
+  }
+  const sorted = [...parsed].sort();
+  if (parsed.some((item, index) => item !== sorted[index])) {
+    fail(`${label} must be sorted`);
+  }
+  return Object.freeze(parsed);
+}
+
+function parseRuntime(value: unknown): RuntimeConfiguration {
+  const runtime = requireRecord(value, "runtime");
+  requireExactKeys(
+    runtime,
+    ["bundle_sha256", "destination", "entrypoint_resource", "external", "package_resource", "tool"],
+    "runtime",
+  );
+  const bundleSha256 = requireString(runtime.bundle_sha256, "runtime.bundle_sha256");
+  if (!/^[0-9a-f]{64}$/u.test(bundleSha256)) {
+    fail("runtime.bundle_sha256 must be a lowercase SHA-256 digest");
+  }
+  const tool = requireString(runtime.tool, "runtime.tool");
+  if (!SAFE_PERMISSION_NAME.test(tool)) {
+    fail("runtime.tool must be a normalized OpenCode tool identifier");
+  }
+  return {
+    bundleSha256,
+    destination: requireDestination(runtime.destination, "runtime.destination"),
+    entrypointResource: requireIdentifier(
+      runtime.entrypoint_resource,
+      "runtime.entrypoint_resource",
+    ),
+    external: requireUniqueStringArray(runtime.external, "runtime.external", SAFE_NODE_BUILTIN),
+    packageResource: requireIdentifier(runtime.package_resource, "runtime.package_resource"),
+    tool,
+  };
 }
 
 function parseArtifactRoot(value: unknown): ArtifactRootConfiguration {
@@ -245,7 +311,7 @@ function parseConfiguration(value: unknown): OpenCodeConfiguration {
   const configuration = requireRecord(value, "configuration");
   requireExactKeys(
     configuration,
-    ["agent", "artifact_root", "command", "copies", "permissions"],
+    ["agent", "artifact_root", "command", "copies", "permissions", "runtime"],
     "configuration",
   );
   const agent = parseAgent(configuration.agent);
@@ -261,9 +327,15 @@ function parseConfiguration(value: unknown): OpenCodeConfiguration {
   }
   const artifactRoot = parseArtifactRoot(configuration.artifact_root);
   const copies = parseCopies(configuration.copies);
+  const permissions = parsePermissions(configuration.permissions);
+  const runtime = parseRuntime(configuration.runtime);
+  if (permissions[runtime.tool] !== "allow") {
+    fail("runtime.tool permission must be allow");
+  }
   for (const destination of [
     agent.destination,
     command.destination,
+    runtime.destination,
     ...copies.map((copy) => copy.destination),
   ]) {
     if (
@@ -279,7 +351,8 @@ function parseConfiguration(value: unknown): OpenCodeConfiguration {
     artifactRoot,
     command,
     copies,
-    permissions: parsePermissions(configuration.permissions),
+    permissions,
+    runtime,
   };
 }
 
@@ -331,19 +404,87 @@ function generateCommand(configuration: OpenCodeConfiguration, body: string): Ui
       "",
       `User input: ${configuration.command.argumentPlaceholder}`,
       "",
+      `After collecting both required inputs, call ${configuration.runtime.tool} with those exact values and the optional artifact_root override. Present the returned absolute artifact_root before any later effect.`,
+      "",
       body,
     ].join("\n"),
   );
 }
 
 function outputPath(output: PlatformOutputV1): string {
-  return output.type === "copy-resource" ? output.destination : output.path;
+  return output.type === "generated-file" ? output.path : output.destination;
 }
 
 function compareOutputs(left: PlatformOutputV1, right: PlatformOutputV1): number {
   const leftPath = outputPath(left);
   const rightPath = outputPath(right);
   return leftPath < rightPath ? -1 : leftPath > rightPath ? 1 : 0;
+}
+
+function runtimeResourceClosure(
+  resources: ReadonlyMap<string, ResolvedResourceV1>,
+  entrypoint: string,
+): readonly ResolvedResourceV1[] {
+  const selected = new Map<string, ResolvedResourceV1>();
+  const visit = (resourceId: string): void => {
+    if (selected.has(resourceId)) {
+      return;
+    }
+    const resource = requireResource(resources, resourceId, undefined, true, "runtime");
+    selected.set(resourceId, resource);
+    for (const dependency of resource.requires) {
+      visit(dependency);
+    }
+  };
+  visit(entrypoint);
+  return [...selected.values()].sort((left, right) =>
+    left.id < right.id ? -1 : left.id > right.id ? 1 : 0,
+  );
+}
+
+async function validateRuntimePackage(
+  assembly: ResolvedAssemblyV1,
+  configuration: OpenCodeConfiguration,
+  resources: ReadonlyMap<string, ResolvedResourceV1>,
+): Promise<readonly Readonly<{ name: string; version: string }>[]> {
+  requireResource(
+    resources,
+    configuration.runtime.packageResource,
+    "platform-package",
+    true,
+    "runtime.package_resource",
+  );
+  let packageDefinition: unknown;
+  try {
+    packageDefinition = JSON.parse(
+      UTF8_DECODER.decode(await assembly.readSource(configuration.runtime.packageResource, "")),
+    );
+  } catch {
+    fail("runtime package resource must be valid UTF-8 JSON");
+  }
+  const packageRecord = requireRecord(packageDefinition, "runtime package");
+  if (packageRecord.name !== EXPECTED_ARTIFACT_NAME) {
+    fail("runtime package name does not match the artifact name");
+  }
+  const dependencies = requireRecord(packageRecord.dependencies, "runtime package dependencies");
+  const packageNames = Object.keys(dependencies).sort();
+  if (packageNames.length === 0) {
+    fail("runtime package dependencies must not be empty");
+  }
+  const bundledPackages = packageNames.map((packageName) => {
+    if (!SAFE_PACKAGE_NAME.test(packageName)) {
+      fail(`runtime package dependency ${JSON.stringify(packageName)} has an invalid name`);
+    }
+    const version = dependencies[packageName];
+    if (typeof version !== "string" || !/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/u.test(version)) {
+      fail(`runtime package dependency ${JSON.stringify(packageName)} must have a version`);
+    }
+    return Object.freeze({ name: packageName, version });
+  });
+  if (dependencies["@opencode-ai/plugin"] !== "1.18.4") {
+    fail("runtime package must pin @opencode-ai/plugin to 1.18.4");
+  }
+  return Object.freeze(bundledPackages);
 }
 
 async function assembleOpenCode(assembly: ResolvedAssemblyV1): Promise<PlatformAssemblyPlanV1> {
@@ -359,6 +500,18 @@ async function assembleOpenCode(assembly: ResolvedAssemblyV1): Promise<PlatformA
   const resources = new Map(assembly.resources.map((resource) => [resource.id, resource]));
   requireResource(resources, configuration.agent.resource, "agent", true, "agent");
   requireResource(resources, configuration.command.resource, "command", true, "command");
+  requireResource(
+    resources,
+    configuration.runtime.entrypointResource,
+    "platform-runtime",
+    true,
+    "runtime.entrypoint_resource",
+  );
+  const bundledPackages = await validateRuntimePackage(assembly, configuration, resources);
+  const runtimeResources = runtimeResourceClosure(
+    resources,
+    configuration.runtime.entrypointResource,
+  );
   const copiedResourceIds = new Set(configuration.copies.map((copy) => copy.resource));
   if (
     copiedResourceIds.has(configuration.agent.resource) ||
@@ -375,6 +528,8 @@ async function assembleOpenCode(assembly: ResolvedAssemblyV1): Promise<PlatformA
   const emittedResourceIds = new Set([
     configuration.agent.resource,
     configuration.command.resource,
+    configuration.runtime.packageResource,
+    ...runtimeResources.map((resource) => resource.id),
     ...copiedResourceIds,
     platformHandlers[0]?.id ?? "",
   ]);
@@ -406,6 +561,15 @@ async function assembleOpenCode(assembly: ResolvedAssemblyV1): Promise<PlatformA
       mode: "0644",
       path: configuration.command.destination,
       type: "generated-file",
+    },
+    {
+      bundledPackages,
+      destination: configuration.runtime.destination,
+      entrypoint: configuration.runtime.entrypointResource,
+      expectedSha256: configuration.runtime.bundleSha256,
+      external: configuration.runtime.external,
+      resources: runtimeResources.map((resource) => resource.id),
+      type: "bun-bundle",
     },
   );
 

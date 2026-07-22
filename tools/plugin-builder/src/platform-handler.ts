@@ -73,7 +73,22 @@ export interface GeneratedFileOutputV1 {
   readonly type: "generated-file";
 }
 
-export type PlatformOutputV1 = CopyResourceOutputV1 | GeneratedFileOutputV1;
+export interface BunBundleOutputV1 {
+  readonly bundledPackages: readonly BunBundlePackageV1[];
+  readonly destination: string;
+  readonly entrypoint: string;
+  readonly expectedSha256: string;
+  readonly external: readonly string[];
+  readonly resources: readonly string[];
+  readonly type: "bun-bundle";
+}
+
+export interface BunBundlePackageV1 {
+  readonly name: string;
+  readonly version: string;
+}
+
+export type PlatformOutputV1 = BunBundleOutputV1 | CopyResourceOutputV1 | GeneratedFileOutputV1;
 
 export interface PlatformAssemblyPlanV1 {
   readonly outputs: readonly PlatformOutputV1[];

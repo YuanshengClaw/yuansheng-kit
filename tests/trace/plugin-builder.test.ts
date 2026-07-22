@@ -14,13 +14,18 @@ const MANIFEST_PATH = "plugins/trace/manifest.json";
 const PLATFORM = "opencode";
 const ARTIFACT_NAME = "@yuansheng-kit/opencode-ys-trace";
 const NIX_STORE_MARKER = Buffer.from("/nix/store", "utf8");
+const WORKSPACE_MARKER = Buffer.from(WORKSPACE_ROOT, "utf8");
 const FIXED_MODEL_MARKER = Buffer.from("deepseek/", "utf8");
 const FORBIDDEN_ARTIFACT_PATHS = [
   /(?:^|\/)dist(?:\/|$)/iu,
   /(?:^|\/)execution-summary(?:[./-]|$)/iu,
   /(?:^|\/)install-global\.sh$/iu,
   /(?:^|\/)perf-data-validator(?:\/|$)/iu,
+  /(?:^|\/)node_modules(?:\/|$)/iu,
+  /(?:^|\/)package\.json$/iu,
+  /(?:^|\/)(?:bun\.lockb?|package-lock\.json|pnpm-lock\.yaml|yarn\.lock)$/iu,
   /(?:^|\/)source\.json$/iu,
+  /^\.opencode\/yuansheng\/sources(?:\/|$)/iu,
   /(?:^|\/)pattern(?:\/|$)/iu,
 ];
 
@@ -188,6 +193,7 @@ async function expectVerifiedArtifact(
   for (const file of files) {
     expect(FORBIDDEN_ARTIFACT_PATHS.some((pattern) => pattern.test(file.path))).toBe(false);
     expect(Buffer.from(file.bytes).indexOf(NIX_STORE_MARKER)).toBe(-1);
+    expect(Buffer.from(file.bytes).indexOf(WORKSPACE_MARKER)).toBe(-1);
     expect(Buffer.from(file.bytes).indexOf(FIXED_MODEL_MARKER)).toBe(-1);
   }
   return files;
@@ -253,6 +259,9 @@ describe("Yuansheng Trace plugin build", () => {
     const firstFiles = await expectVerifiedArtifact(firstOutput, firstReceipt);
     const secondFiles = await expectVerifiedArtifact(secondOutput, secondReceipt);
     expectIdenticalArtifacts(firstFiles, secondFiles);
+    expect(firstFiles.filter((file) => file.path === ".opencode/plugins/ys-trace.js")).toHaveLength(
+      1,
+    );
 
     expect(secondReceipt).toEqual({ ...firstReceipt, output: secondOutput });
 

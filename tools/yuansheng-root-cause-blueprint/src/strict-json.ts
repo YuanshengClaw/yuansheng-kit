@@ -1,4 +1,9 @@
-import { type Node, type ParseError, parseTree, printParseErrorCode } from "jsonc-parser";
+import {
+  type Node,
+  type ParseError,
+  parseTree,
+  printParseErrorCode,
+} from "jsonc-parser/lib/esm/main.js";
 
 export type JsonPrimitive = boolean | null | number | string;
 

@@ -150,6 +150,10 @@ export class WorkspaceReader {
     return procFileDescriptorPath(handle);
   }
 
+  rootDirectoryPath(): string {
+    return procFileDescriptorPath(this.#rootHandle);
+  }
+
   async #openRelative(
     relativePath: string,
     label: string,
