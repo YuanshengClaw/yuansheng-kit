@@ -3,7 +3,7 @@
     "title": "Yuansheng Trace Root Cause Diagnosis Report Lite",
     "report_type": "performance_root_cause",
     "report_version": "v1-lite",
-    "primary_consumers": ["human_reviewer", "agent4_optimizer"]
+    "primary_consumers": ["human_reviewer", "ys-craft"]
   },
   "section1_basic_info": {
     "diagnosis_id": "diag-20260717-144258",
@@ -20,7 +20,7 @@
     "anomaly_conclusion": "clear_page is the rank 001 HashMapBench hotspot. RISC-V IPC is 0.488, the cache miss rate is 100%, and no AArch64 comparison is available.",
     "affected_target": "RV / HashMapBench",
     "most_likely_root_cause": "The clear_page zeroing path is constrained by memory behavior and a serial address-update chain.",
-    "recommend_to_agent4": "conditional"
+    "recommend_to_ys_craft": "conditional"
   },
   "section3_key_evidence": {
     "3_1_metric_evidence": [
@@ -86,7 +86,7 @@
     "needs_human_review": true,
     "human_review_focus": "Confirm the clear_page implementation and instruction semantics, collect a same-version AArch64 comparison and more annotate samples, and quantify the memory-bandwidth effect."
   },
-  "section6_agent4_actions": {
+  "section6_ys_craft_actions": {
     "proceed_to_optimization": "conditional",
     "priority_location": "clear_page",
     "recommended_first_action": "Have a human map the evidenced clear_page hotspot to the current commit, then compare the feasibility of removing nop padding, breaking the serial address dependency, and using another zeroing method.",
@@ -95,7 +95,7 @@
   },
   "section7_final_verdict": {
     "final_status": "probable_root_cause",
-    "allow_auto_forward_to_agent4": false,
+    "allow_auto_forward_to_ys_craft": false,
     "block_reason": "The Pattern catalog, AArch64 comparison, and traceable source location are unavailable, so human review is required."
   }
 }

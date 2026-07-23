@@ -20,24 +20,24 @@ async function loadBlueprint(): Promise<YuanshengRootCauseBlueprintV1Lite> {
 }
 
 describe("RootCauseBlueprint semantic rules", () => {
-  test("accepts the stable example and rejects unsupported conclusions", async () => {
+  test("accepts the current example and rejects unsupported conclusions", async () => {
     const blueprint = await loadBlueprint();
     expect(checkYuanshengRootCauseBlueprintV1Lite(blueprint)).toEqual([]);
 
     const conflicting = structuredClone(blueprint);
-    conflicting.section6_agent4_actions.proceed_to_optimization = "no";
+    conflicting.section6_ys_craft_actions.proceed_to_optimization = "no";
     expect(checkYuanshengRootCauseBlueprintV1Lite(conflicting)).toContainEqual(
-      expect.objectContaining({ code: "agent4-decision-conflict" }),
+      expect.objectContaining({ code: "ys-craft-decision-conflict" }),
     );
 
     const unsupportedLocation = structuredClone(blueprint);
-    unsupportedLocation.section6_agent4_actions.priority_location = "unobserved_function";
+    unsupportedLocation.section6_ys_craft_actions.priority_location = "unobserved_function";
     expect(checkYuanshengRootCauseBlueprintV1Lite(unsupportedLocation)).toContainEqual(
       expect.objectContaining({ code: "unsupported-priority-location" }),
     );
 
     const inventedPath = structuredClone(blueprint);
-    inventedPath.section6_agent4_actions.recommended_first_action =
+    inventedPath.section6_ys_craft_actions.recommended_first_action =
       "Edit src/hotspot/share/runtime/thread.cpp:42.";
     expect(checkYuanshengRootCauseBlueprintV1Lite(inventedPath)).toContainEqual(
       expect.objectContaining({ code: "unsupported-action-location" }),

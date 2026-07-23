@@ -3,7 +3,7 @@
     "title": "Yuansheng Trace Root Cause Diagnosis Report Lite",
     "report_type": "performance_root_cause",
     "report_version": "v1-lite",
-    "primary_consumers": ["human_reviewer", "agent4_optimizer"]
+    "primary_consumers": ["human_reviewer", "ys-craft"]
   },
   "section1_basic_info": {
     "diagnosis_id": "diag-invalid-review",
@@ -20,7 +20,7 @@
     "anomaly_conclusion": "A performance anomaly is present.",
     "affected_target": "RV / case",
     "most_likely_root_cause": "The hotspot loop may contain an implementation issue.",
-    "recommend_to_agent4": "conditional"
+    "recommend_to_ys_craft": "conditional"
   },
   "section3_key_evidence": {
     "3_1_metric_evidence": [],
@@ -52,7 +52,7 @@
     "needs_human_review": false,
     "human_review_focus": "Review the root cause and proposed change scope."
   },
-  "section6_agent4_actions": {
+  "section6_ys_craft_actions": {
     "proceed_to_optimization": "conditional",
     "priority_location": "src/hot.c:hot",
     "recommended_first_action": "Have a human review the hotspot implementation first.",
@@ -61,7 +61,7 @@
   },
   "section7_final_verdict": {
     "final_status": "probable_root_cause",
-    "allow_auto_forward_to_agent4": false,
+    "allow_auto_forward_to_ys_craft": false,
     "block_reason": "Human review is required before forwarding."
   }
 }

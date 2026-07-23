@@ -5,7 +5,7 @@
  */
 
 /**
- * Stable machine contract between Yuansheng Trace root-cause analysis and human review.
+ * Pre-release machine contract between Yuansheng Trace root-cause analysis, human review, and Yuansheng Craft.
  */
 export type YuanshengRootCauseBlueprintV1Lite = {
   [k: string]: unknown;
@@ -14,7 +14,7 @@ export type YuanshengRootCauseBlueprintV1Lite = {
     title: "Yuansheng Trace Root Cause Diagnosis Report Lite";
     report_type: "performance_root_cause";
     report_version: "v1-lite";
-    primary_consumers: ["human_reviewer", "agent4_optimizer"];
+    primary_consumers: ["human_reviewer", "ys-craft"];
   };
   section1_basic_info: {
     diagnosis_id: NonEmptyString;
@@ -34,7 +34,7 @@ export type YuanshengRootCauseBlueprintV1Lite = {
     anomaly_conclusion: NonEmptyString;
     affected_target: NonEmptyString;
     most_likely_root_cause: KnownStringOrNull;
-    recommend_to_agent4: "no" | "conditional";
+    recommend_to_ys_craft: "no" | "conditional";
   };
   section3_key_evidence: {
     "3_1_metric_evidence": MetricEvidence[];
@@ -63,7 +63,7 @@ export type YuanshengRootCauseBlueprintV1Lite = {
     needs_human_review: true;
     human_review_focus: NonEmptyString;
   };
-  section6_agent4_actions: {
+  section6_ys_craft_actions: {
     proceed_to_optimization: "no" | "conditional";
     priority_location: KnownStringOrNull;
     recommended_first_action: NonEmptyString;
@@ -76,7 +76,7 @@ export type YuanshengRootCauseBlueprintV1Lite = {
       | "probable_root_cause"
       | "insufficient_evidence"
       | "false_alarm";
-    allow_auto_forward_to_agent4: false;
+    allow_auto_forward_to_ys_craft: false;
     block_reason: NonEmptyString;
   };
 };

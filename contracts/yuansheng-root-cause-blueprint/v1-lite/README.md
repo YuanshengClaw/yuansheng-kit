@@ -1,8 +1,20 @@
 # Yuansheng Root Cause Blueprint v1-lite
 
-This directory defines the stable Yuansheng Kit root-cause handoff contract. The
-canonical source is [`schema.json`](schema.json); this README and the examples
-explain the Schema but do not form a second definition.
+This directory defines the current pre-release Yuansheng Kit root-cause handoff
+contract. The canonical source is [`schema.json`](schema.json); this README and
+the examples explain the Schema but do not form a second definition.
+
+## Pre-release reset
+
+The project has not released any v1-lite contract bytes. This revision therefore
+uses a one-time incompatible pre-release reset while retaining the existing
+path, version label, and `$id`. Earlier draft artifacts are invalid and must be
+regenerated from the current `schema.json`; consumers must reject them rather
+than translate aliases or accept both field sets.
+
+The unchanged `$id` identifies the first releasable v1-lite contract, not
+compatibility with discarded drafts. Once this reset is accepted and frozen,
+future incompatible changes require a new version and `$id`.
 
 ## Contract rules
 
@@ -13,7 +25,7 @@ explain the Schema but do not form a second definition.
 - The contract does not use a Pattern catalog. Every hotspot must set both
   `rvv_pattern` and `pattern_confidence` to `null`, and `current_gaps` must
   contain `pattern_catalog_unavailable`.
-- `allow_auto_forward_to_agent4` is always `false`, `needs_human_review` is
+- `allow_auto_forward_to_ys_craft` is always `false`, `needs_human_review` is
   always `true`, and both `human_review_focus` and `block_reason` must be
   non-empty.
 - `overall_confidence` covers available perf, metadata, and Hardware Profile
@@ -51,7 +63,7 @@ the missing fact.
 | `insufficient_evidence` | `insufficient_evidence` |
 | `false_alarm`           | `false_alarm`           |
 
-In v1-lite, `recommend_to_agent4` and `proceed_to_optimization` only allow `no`
+In v1-lite, `recommend_to_ys_craft` and `proceed_to_optimization` only allow `no`
 or `conditional`. Even a confirmed result requires human review before
 optimization.
 

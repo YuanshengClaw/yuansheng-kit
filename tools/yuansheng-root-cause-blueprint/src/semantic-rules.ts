@@ -14,15 +14,15 @@ export function checkYuanshengRootCauseBlueprintV1Lite(
   blueprint: YuanshengRootCauseBlueprintV1Lite,
 ): readonly SemanticIssue[] {
   const issues: SemanticIssue[] = [];
-  const recommended = blueprint.section2_summary.recommend_to_agent4;
-  const proceeding = blueprint.section6_agent4_actions.proceed_to_optimization;
+  const recommended = blueprint.section2_summary.recommend_to_ys_craft;
+  const proceeding = blueprint.section6_ys_craft_actions.proceed_to_optimization;
 
   if (recommended !== proceeding) {
     issues.push(
       issue(
-        "agent4-decision-conflict",
-        "/section6_agent4_actions/proceed_to_optimization",
-        "Agent4 recommendation and optimization decision must agree in v1-lite",
+        "ys-craft-decision-conflict",
+        "/section6_ys_craft_actions/proceed_to_optimization",
+        "Yuansheng Craft recommendation and optimization decision must agree in v1-lite",
       ),
     );
   }
@@ -32,7 +32,7 @@ export function checkYuanshengRootCauseBlueprintV1Lite(
     return issues;
   }
 
-  const priorityLocation = blueprint.section6_agent4_actions.priority_location;
+  const priorityLocation = blueprint.section6_ys_craft_actions.priority_location;
   const hotspotFunctions = new Set(
     blueprint.section3_key_evidence["3_2_hotspot_evidence"].map(
       (hotspot) => hotspot.hotspot_function,
@@ -42,13 +42,13 @@ export function checkYuanshengRootCauseBlueprintV1Lite(
     issues.push(
       issue(
         "unsupported-priority-location",
-        "/section6_agent4_actions/priority_location",
+        "/section6_ys_craft_actions/priority_location",
         "Without source-location evidence, priority_location may only name an evidenced hotspot function",
       ),
     );
   }
 
-  const action = blueprint.section6_agent4_actions.recommended_first_action;
+  const action = blueprint.section6_ys_craft_actions.recommended_first_action;
   const sourcePathOrLine =
     /(?:^|[\s('"`])(?:[A-Za-z0-9_.-]+\/)+[A-Za-z0-9_.-]+(?::[0-9]+)?(?:$|[\s,.;)'"`])/u;
   const explicitLine = /(?:\bline\s*[0-9]+\b|\u7b2c\s*[0-9]+\s*\u884c)/iu;
@@ -56,7 +56,7 @@ export function checkYuanshengRootCauseBlueprintV1Lite(
     issues.push(
       issue(
         "unsupported-action-location",
-        "/section6_agent4_actions/recommended_first_action",
+        "/section6_ys_craft_actions/recommended_first_action",
         "recommended_first_action must not invent a source path or line while source evidence is unavailable",
       ),
     );

@@ -136,10 +136,10 @@ async function revisedBlueprintBytes(
       human_review_focus:
         "Collect a same-version AArch64 baseline and more samples, then map dgemv_n to reviewed source before selecting an optimization.",
     },
-    section6_agent4_actions: {
-      ...original.section6_agent4_actions,
+    section6_ys_craft_actions: {
+      ...original.section6_ys_craft_actions,
       priority_location:
-        identityOverride.functionName ?? original.section6_agent4_actions.priority_location,
+        identityOverride.functionName ?? original.section6_ys_craft_actions.priority_location,
     },
     section7_final_verdict: {
       ...original.section7_final_verdict,

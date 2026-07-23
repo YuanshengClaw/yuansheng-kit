@@ -25,7 +25,7 @@ async function readStrictJson(path: string): Promise<JsonValue> {
 }
 
 describe("generated RootCauseBlueprint validator", () => {
-  test("accepts the stable example", async () => {
+  test("accepts the current example", async () => {
     const value = await readStrictJson(validExample);
     expect(validateYuanshengRootCauseBlueprintV1Lite(value)).toBe(true);
   });

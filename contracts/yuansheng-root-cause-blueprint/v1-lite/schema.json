@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "urn:yuansheng-kit:contracts:yuansheng-root-cause-blueprint:v1-lite",
   "title": "Yuansheng Root Cause Blueprint v1-lite",
-  "description": "Stable machine contract between Yuansheng Trace root-cause analysis and human review.",
+  "description": "Pre-release machine contract between Yuansheng Trace root-cause analysis, human review, and Yuansheng Craft.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -12,7 +12,7 @@
     "section3_key_evidence",
     "section4_root_cause",
     "section5_risks_and_gaps",
-    "section6_agent4_actions",
+    "section6_ys_craft_actions",
     "section7_final_verdict"
   ],
   "properties": {
@@ -31,7 +31,7 @@
           "const": "v1-lite"
         },
         "primary_consumers": {
-          "const": ["human_reviewer", "agent4_optimizer"]
+          "const": ["human_reviewer", "ys-craft"]
         }
       }
     },
@@ -97,7 +97,7 @@
         "anomaly_conclusion",
         "affected_target",
         "most_likely_root_cause",
-        "recommend_to_agent4"
+        "recommend_to_ys_craft"
       ],
       "properties": {
         "anomaly_conclusion": {
@@ -109,7 +109,7 @@
         "most_likely_root_cause": {
           "$ref": "#/$defs/known_string_or_null"
         },
-        "recommend_to_agent4": {
+        "recommend_to_ys_craft": {
           "enum": ["no", "conditional"]
         }
       }
@@ -198,7 +198,7 @@
         }
       }
     },
-    "section6_agent4_actions": {
+    "section6_ys_craft_actions": {
       "type": "object",
       "additionalProperties": false,
       "required": [
@@ -229,7 +229,7 @@
     "section7_final_verdict": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["final_status", "allow_auto_forward_to_agent4", "block_reason"],
+      "required": ["final_status", "allow_auto_forward_to_ys_craft", "block_reason"],
       "properties": {
         "final_status": {
           "enum": [
@@ -239,7 +239,7 @@
             "false_alarm"
           ]
         },
-        "allow_auto_forward_to_agent4": {
+        "allow_auto_forward_to_ys_craft": {
           "const": false
         },
         "block_reason": {

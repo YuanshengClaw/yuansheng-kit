@@ -18,7 +18,7 @@ description: Produce and semantically review evidence-grounded Yuansheng Root Ca
 5. Do not invent a source file, line, code location, metric, baseline, or
    hardware capability. Keep recommendations within what the evidence can
    support.
-6. Set `needs_human_review` to `true` and `allow_auto_forward_to_agent4` to
+6. Set `needs_human_review` to `true` and `allow_auto_forward_to_ys_craft` to
    `false`.
 7. Return strict JSON conforming to the supplied v1-lite Schema and preserve the
    workflow-requested claim-to-evidence references.

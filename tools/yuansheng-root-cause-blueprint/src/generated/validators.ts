@@ -7,7 +7,7 @@ const schema31 = {
   $id: "urn:yuansheng-kit:contracts:yuansheng-root-cause-blueprint:v1-lite",
   title: "Yuansheng Root Cause Blueprint v1-lite",
   description:
-    "Stable machine contract between Yuansheng Trace root-cause analysis and human review.",
+    "Pre-release machine contract between Yuansheng Trace root-cause analysis, human review, and Yuansheng Craft.",
   type: "object",
   additionalProperties: false,
   required: [
@@ -17,7 +17,7 @@ const schema31 = {
     "section3_key_evidence",
     "section4_root_cause",
     "section5_risks_and_gaps",
-    "section6_agent4_actions",
+    "section6_ys_craft_actions",
     "section7_final_verdict",
   ],
   properties: {
@@ -29,7 +29,7 @@ const schema31 = {
         title: { const: "Yuansheng Trace Root Cause Diagnosis Report Lite" },
         report_type: { const: "performance_root_cause" },
         report_version: { const: "v1-lite" },
-        primary_consumers: { const: ["human_reviewer", "agent4_optimizer"] },
+        primary_consumers: { const: ["human_reviewer", "ys-craft"] },
       },
     },
     section1_basic_info: {
@@ -71,13 +71,13 @@ const schema31 = {
         "anomaly_conclusion",
         "affected_target",
         "most_likely_root_cause",
-        "recommend_to_agent4",
+        "recommend_to_ys_craft",
       ],
       properties: {
         anomaly_conclusion: { $ref: "#/$defs/non_empty_string" },
         affected_target: { $ref: "#/$defs/non_empty_string" },
         most_likely_root_cause: { $ref: "#/$defs/known_string_or_null" },
-        recommend_to_agent4: { enum: ["no", "conditional"] },
+        recommend_to_ys_craft: { enum: ["no", "conditional"] },
       },
     },
     section3_key_evidence: {
@@ -137,7 +137,7 @@ const schema31 = {
         human_review_focus: { $ref: "#/$defs/non_empty_string" },
       },
     },
-    section6_agent4_actions: {
+    section6_ys_craft_actions: {
       type: "object",
       additionalProperties: false,
       required: [
@@ -158,7 +158,7 @@ const schema31 = {
     section7_final_verdict: {
       type: "object",
       additionalProperties: false,
-      required: ["final_status", "allow_auto_forward_to_agent4", "block_reason"],
+      required: ["final_status", "allow_auto_forward_to_ys_craft", "block_reason"],
       properties: {
         final_status: {
           enum: [
@@ -168,7 +168,7 @@ const schema31 = {
             "false_alarm",
           ],
         },
-        allow_auto_forward_to_agent4: { const: false },
+        allow_auto_forward_to_ys_craft: { const: false },
         block_reason: { $ref: "#/$defs/non_empty_string" },
       },
     },
@@ -3253,15 +3253,15 @@ function validate20(
       errors++;
     }
     if (
-      data.section6_agent4_actions === undefined ||
-      !func0.call(data, "section6_agent4_actions")
+      data.section6_ys_craft_actions === undefined ||
+      !func0.call(data, "section6_ys_craft_actions")
     ) {
       const err81 = {
         instancePath,
         schemaPath: "#/required",
         keyword: "required",
-        params: { missingProperty: "section6_agent4_actions" },
-        message: "must have required property '" + "section6_agent4_actions" + "'",
+        params: { missingProperty: "section6_ys_craft_actions" },
+        message: "must have required property '" + "section6_ys_craft_actions" + "'",
       };
       if (vErrors === null) {
         vErrors = [err81];
@@ -3294,7 +3294,7 @@ function validate20(
           key0 === "section3_key_evidence" ||
           key0 === "section4_root_cause" ||
           key0 === "section5_risks_and_gaps" ||
-          key0 === "section6_agent4_actions" ||
+          key0 === "section6_ys_craft_actions" ||
           key0 === "section7_final_verdict"
         )
       ) {
@@ -4029,15 +4029,15 @@ function validate20(
           errors++;
         }
         if (
-          data65.recommend_to_agent4 === undefined ||
-          !func0.call(data65, "recommend_to_agent4")
+          data65.recommend_to_ys_craft === undefined ||
+          !func0.call(data65, "recommend_to_ys_craft")
         ) {
           const err122 = {
             instancePath: instancePath + "/section2_summary",
             schemaPath: "#/properties/section2_summary/required",
             keyword: "required",
-            params: { missingProperty: "recommend_to_agent4" },
-            message: "must have required property '" + "recommend_to_agent4" + "'",
+            params: { missingProperty: "recommend_to_ys_craft" },
+            message: "must have required property '" + "recommend_to_ys_craft" + "'",
           };
           if (vErrors === null) {
             vErrors = [err122];
@@ -4052,7 +4052,7 @@ function validate20(
               key3 === "anomaly_conclusion" ||
               key3 === "affected_target" ||
               key3 === "most_likely_root_cause" ||
-              key3 === "recommend_to_agent4"
+              key3 === "recommend_to_ys_craft"
             )
           ) {
             const err123 = {
@@ -4155,16 +4155,19 @@ function validate20(
             errors = vErrors.length;
           }
         }
-        if (data65.recommend_to_agent4 !== undefined && func0.call(data65, "recommend_to_agent4")) {
-          let data69 = data65.recommend_to_agent4;
+        if (
+          data65.recommend_to_ys_craft !== undefined &&
+          func0.call(data65, "recommend_to_ys_craft")
+        ) {
+          let data69 = data65.recommend_to_ys_craft;
           if (!(data69 === "no" || data69 === "conditional")) {
             const err128 = {
-              instancePath: instancePath + "/section2_summary/recommend_to_agent4",
-              schemaPath: "#/properties/section2_summary/properties/recommend_to_agent4/enum",
+              instancePath: instancePath + "/section2_summary/recommend_to_ys_craft",
+              schemaPath: "#/properties/section2_summary/properties/recommend_to_ys_craft/enum",
               keyword: "enum",
               params: {
                 allowedValues:
-                  schema31.properties.section2_summary.properties.recommend_to_agent4.enum,
+                  schema31.properties.section2_summary.properties.recommend_to_ys_craft.enum,
               },
               message: "must be equal to one of the allowed values",
             };
@@ -5021,16 +5024,19 @@ function validate20(
         errors++;
       }
     }
-    if (data.section6_agent4_actions !== undefined && func0.call(data, "section6_agent4_actions")) {
-      let data90 = data.section6_agent4_actions;
+    if (
+      data.section6_ys_craft_actions !== undefined &&
+      func0.call(data, "section6_ys_craft_actions")
+    ) {
+      let data90 = data.section6_ys_craft_actions;
       if (data90 && typeof data90 == "object" && !Array.isArray(data90)) {
         if (
           data90.proceed_to_optimization === undefined ||
           !func0.call(data90, "proceed_to_optimization")
         ) {
           const err167 = {
-            instancePath: instancePath + "/section6_agent4_actions",
-            schemaPath: "#/properties/section6_agent4_actions/required",
+            instancePath: instancePath + "/section6_ys_craft_actions",
+            schemaPath: "#/properties/section6_ys_craft_actions/required",
             keyword: "required",
             params: { missingProperty: "proceed_to_optimization" },
             message: "must have required property '" + "proceed_to_optimization" + "'",
@@ -5044,8 +5050,8 @@ function validate20(
         }
         if (data90.priority_location === undefined || !func0.call(data90, "priority_location")) {
           const err168 = {
-            instancePath: instancePath + "/section6_agent4_actions",
-            schemaPath: "#/properties/section6_agent4_actions/required",
+            instancePath: instancePath + "/section6_ys_craft_actions",
+            schemaPath: "#/properties/section6_ys_craft_actions/required",
             keyword: "required",
             params: { missingProperty: "priority_location" },
             message: "must have required property '" + "priority_location" + "'",
@@ -5062,8 +5068,8 @@ function validate20(
           !func0.call(data90, "recommended_first_action")
         ) {
           const err169 = {
-            instancePath: instancePath + "/section6_agent4_actions",
-            schemaPath: "#/properties/section6_agent4_actions/required",
+            instancePath: instancePath + "/section6_ys_craft_actions",
+            schemaPath: "#/properties/section6_ys_craft_actions/required",
             keyword: "required",
             params: { missingProperty: "recommended_first_action" },
             message: "must have required property '" + "recommended_first_action" + "'",
@@ -5080,8 +5086,8 @@ function validate20(
           !func0.call(data90, "recommended_verification")
         ) {
           const err170 = {
-            instancePath: instancePath + "/section6_agent4_actions",
-            schemaPath: "#/properties/section6_agent4_actions/required",
+            instancePath: instancePath + "/section6_ys_craft_actions",
+            schemaPath: "#/properties/section6_ys_craft_actions/required",
             keyword: "required",
             params: { missingProperty: "recommended_verification" },
             message: "must have required property '" + "recommended_verification" + "'",
@@ -5095,8 +5101,8 @@ function validate20(
         }
         if (data90.change_risk === undefined || !func0.call(data90, "change_risk")) {
           const err171 = {
-            instancePath: instancePath + "/section6_agent4_actions",
-            schemaPath: "#/properties/section6_agent4_actions/required",
+            instancePath: instancePath + "/section6_ys_craft_actions",
+            schemaPath: "#/properties/section6_ys_craft_actions/required",
             keyword: "required",
             params: { missingProperty: "change_risk" },
             message: "must have required property '" + "change_risk" + "'",
@@ -5119,8 +5125,8 @@ function validate20(
             )
           ) {
             const err172 = {
-              instancePath: instancePath + "/section6_agent4_actions",
-              schemaPath: "#/properties/section6_agent4_actions/additionalProperties",
+              instancePath: instancePath + "/section6_ys_craft_actions",
+              schemaPath: "#/properties/section6_ys_craft_actions/additionalProperties",
               keyword: "additionalProperties",
               params: { additionalProperty: key8 },
               message: "must NOT have additional properties",
@@ -5140,13 +5146,13 @@ function validate20(
           let data91 = data90.proceed_to_optimization;
           if (!(data91 === "no" || data91 === "conditional")) {
             const err173 = {
-              instancePath: instancePath + "/section6_agent4_actions/proceed_to_optimization",
+              instancePath: instancePath + "/section6_ys_craft_actions/proceed_to_optimization",
               schemaPath:
-                "#/properties/section6_agent4_actions/properties/proceed_to_optimization/enum",
+                "#/properties/section6_ys_craft_actions/properties/proceed_to_optimization/enum",
               keyword: "enum",
               params: {
                 allowedValues:
-                  schema31.properties.section6_agent4_actions.properties.proceed_to_optimization
+                  schema31.properties.section6_ys_craft_actions.properties.proceed_to_optimization
                     .enum,
               },
               message: "must be equal to one of the allowed values",
@@ -5162,7 +5168,7 @@ function validate20(
         if (data90.priority_location !== undefined && func0.call(data90, "priority_location")) {
           if (
             !validate21(data90.priority_location, {
-              instancePath: instancePath + "/section6_agent4_actions/priority_location",
+              instancePath: instancePath + "/section6_ys_craft_actions/priority_location",
               parentData: data90,
               parentDataProperty: "priority_location",
               rootData,
@@ -5181,7 +5187,7 @@ function validate20(
           if (typeof data93 === "string") {
             if (func135(data93) < 1) {
               const err174 = {
-                instancePath: instancePath + "/section6_agent4_actions/recommended_first_action",
+                instancePath: instancePath + "/section6_ys_craft_actions/recommended_first_action",
                 schemaPath: "#/$defs/non_empty_string/minLength",
                 keyword: "minLength",
                 params: { limit: 1 },
@@ -5196,7 +5202,7 @@ function validate20(
             }
           } else {
             const err175 = {
-              instancePath: instancePath + "/section6_agent4_actions/recommended_first_action",
+              instancePath: instancePath + "/section6_ys_craft_actions/recommended_first_action",
               schemaPath: "#/$defs/non_empty_string/type",
               keyword: "type",
               params: { type: "string" },
@@ -5218,7 +5224,7 @@ function validate20(
           if (typeof data94 === "string") {
             if (func135(data94) < 1) {
               const err176 = {
-                instancePath: instancePath + "/section6_agent4_actions/recommended_verification",
+                instancePath: instancePath + "/section6_ys_craft_actions/recommended_verification",
                 schemaPath: "#/$defs/non_empty_string/minLength",
                 keyword: "minLength",
                 params: { limit: 1 },
@@ -5233,7 +5239,7 @@ function validate20(
             }
           } else {
             const err177 = {
-              instancePath: instancePath + "/section6_agent4_actions/recommended_verification",
+              instancePath: instancePath + "/section6_ys_craft_actions/recommended_verification",
               schemaPath: "#/$defs/non_empty_string/type",
               keyword: "type",
               params: { type: "string" },
@@ -5251,12 +5257,12 @@ function validate20(
           let data95 = data90.change_risk;
           if (!(data95 === "high" || data95 === "medium" || data95 === "low")) {
             const err178 = {
-              instancePath: instancePath + "/section6_agent4_actions/change_risk",
-              schemaPath: "#/properties/section6_agent4_actions/properties/change_risk/enum",
+              instancePath: instancePath + "/section6_ys_craft_actions/change_risk",
+              schemaPath: "#/properties/section6_ys_craft_actions/properties/change_risk/enum",
               keyword: "enum",
               params: {
                 allowedValues:
-                  schema31.properties.section6_agent4_actions.properties.change_risk.enum,
+                  schema31.properties.section6_ys_craft_actions.properties.change_risk.enum,
               },
               message: "must be equal to one of the allowed values",
             };
@@ -5270,8 +5276,8 @@ function validate20(
         }
       } else {
         const err179 = {
-          instancePath: instancePath + "/section6_agent4_actions",
-          schemaPath: "#/properties/section6_agent4_actions/type",
+          instancePath: instancePath + "/section6_ys_craft_actions",
+          schemaPath: "#/properties/section6_ys_craft_actions/type",
           keyword: "type",
           params: { type: "object" },
           message: "must be object",
@@ -5303,15 +5309,15 @@ function validate20(
           errors++;
         }
         if (
-          data96.allow_auto_forward_to_agent4 === undefined ||
-          !func0.call(data96, "allow_auto_forward_to_agent4")
+          data96.allow_auto_forward_to_ys_craft === undefined ||
+          !func0.call(data96, "allow_auto_forward_to_ys_craft")
         ) {
           const err181 = {
             instancePath: instancePath + "/section7_final_verdict",
             schemaPath: "#/properties/section7_final_verdict/required",
             keyword: "required",
-            params: { missingProperty: "allow_auto_forward_to_agent4" },
-            message: "must have required property '" + "allow_auto_forward_to_agent4" + "'",
+            params: { missingProperty: "allow_auto_forward_to_ys_craft" },
+            message: "must have required property '" + "allow_auto_forward_to_ys_craft" + "'",
           };
           if (vErrors === null) {
             vErrors = [err181];
@@ -5339,7 +5345,7 @@ function validate20(
           if (
             !(
               key9 === "final_status" ||
-              key9 === "allow_auto_forward_to_agent4" ||
+              key9 === "allow_auto_forward_to_ys_craft" ||
               key9 === "block_reason"
             )
           ) {
@@ -5387,14 +5393,14 @@ function validate20(
           }
         }
         if (
-          data96.allow_auto_forward_to_agent4 !== undefined &&
-          func0.call(data96, "allow_auto_forward_to_agent4")
+          data96.allow_auto_forward_to_ys_craft !== undefined &&
+          func0.call(data96, "allow_auto_forward_to_ys_craft")
         ) {
-          if (false !== data96.allow_auto_forward_to_agent4) {
+          if (false !== data96.allow_auto_forward_to_ys_craft) {
             const err185 = {
-              instancePath: instancePath + "/section7_final_verdict/allow_auto_forward_to_agent4",
+              instancePath: instancePath + "/section7_final_verdict/allow_auto_forward_to_ys_craft",
               schemaPath:
-                "#/properties/section7_final_verdict/properties/allow_auto_forward_to_agent4/const",
+                "#/properties/section7_final_verdict/properties/allow_auto_forward_to_ys_craft/const",
               keyword: "const",
               params: { allowedValue: false },
               message: "must be equal to constant",

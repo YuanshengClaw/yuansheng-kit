@@ -3,7 +3,7 @@
     "title": "Yuansheng Trace Root Cause Diagnosis Report Lite",
     "report_type": "performance_root_cause",
     "report_version": "v1-lite",
-    "primary_consumers": ["human_reviewer", "agent4_optimizer"]
+    "primary_consumers": ["human_reviewer", "ys-craft"]
   },
   "section1_basic_info": {
     "diagnosis_id": "diag-openblas-dgemv-001",
@@ -20,7 +20,7 @@
     "anomaly_conclusion": "The retained RV64 evidence identifies dgemv_n as the rank 001 hotspot, with IPC 0.333535 and 55 annotate samples, but it has no AArch64 baseline.",
     "affected_target": "RV64 / dgemv_2048x2048",
     "most_likely_root_cause": null,
-    "recommend_to_agent4": "no"
+    "recommend_to_ys_craft": "no"
   },
   "section3_key_evidence": {
     "3_1_metric_evidence": [
@@ -82,7 +82,7 @@
     "needs_human_review": true,
     "human_review_focus": "Confirm the target hardware, collect a same-version AArch64 baseline and more samples, then map dgemv_n to reviewed source before selecting an optimization."
   },
-  "section6_agent4_actions": {
+  "section6_ys_craft_actions": {
     "proceed_to_optimization": "no",
     "priority_location": "dgemv_n",
     "recommended_first_action": "Collect a larger annotate sample and a same-version AArch64 comparison, then have a human review the evidenced dgemv_n loop.",
@@ -91,7 +91,7 @@
   },
   "section7_final_verdict": {
     "final_status": "insufficient_evidence",
-    "allow_auto_forward_to_agent4": false,
+    "allow_auto_forward_to_ys_craft": false,
     "block_reason": "The evidence lacks an AArch64 baseline, target hardware identity, source mapping, Pattern catalog, and enough annotate samples for an optimization handoff."
   }
 }
