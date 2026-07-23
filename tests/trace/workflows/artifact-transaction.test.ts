@@ -35,7 +35,10 @@ import type { YuanshengRootCauseBlueprintV1Lite } from "../../../tools/yuansheng
 const WORKSPACE_ROOT = join(import.meta.dir, "../../..");
 const FIXTURE_ROOT = join(WORKSPACE_ROOT, "tests/fixtures/trace/openblas-dgemv/perf-data");
 const PROFILE_PATH = join(WORKSPACE_ROOT, "plugins/trace/resources/hardware-profiles/sg2044.json");
-const DIALOGUE_PATH = join(WORKSPACE_ROOT, "tests/support/mock-llm/fixed-dialogue.json");
+const BLUEPRINT_PATH = join(
+  WORKSPACE_ROOT,
+  "tests/fixtures/trace/openblas-dgemv/blueprint-v1-lite.json",
+);
 const TEST_CASE = "dgemv_2048x2048";
 
 const PERF_STAT = {
@@ -106,10 +109,9 @@ async function temporaryDirectory(): Promise<string> {
 async function revisedBlueprintBytes(
   identityOverride: Readonly<{ functionName?: string; software?: string }> = {},
 ): Promise<Uint8Array> {
-  const dialogue = JSON.parse(await readFile(DIALOGUE_PATH, "utf8")) as {
-    readonly assistant: YuanshengRootCauseBlueprintV1Lite;
-  };
-  const original = dialogue.assistant;
+  const original = JSON.parse(
+    await readFile(BLUEPRINT_PATH, "utf8"),
+  ) as YuanshengRootCauseBlueprintV1Lite;
   return canonicalizeJson({
     ...original,
     section1_basic_info: {
