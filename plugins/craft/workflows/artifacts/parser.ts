@@ -143,6 +143,23 @@ function assertJournal(journal: ActionJournal): void {
   }
 }
 
+function samePrincipal(
+  left: { readonly agent_id: string; readonly session_id: string },
+  right: { readonly agent_id: string; readonly session_id: string },
+): boolean {
+  return left.agent_id === right.agent_id && left.session_id === right.session_id;
+}
+
+const PHASE_OWNER = Object.freeze({
+  building: "ys-craft-patch-builder",
+  delivering: "ys-craft-delivery-coordinator",
+  intake: "ys-craft",
+  planning: "ys-craft-patch-planner",
+  reviewing: "ys-craft-patch-reviewer",
+  root_cause: "ys-craft-root-cause-analyst",
+  verifying: "ys-craft-regression-verifier",
+} as const);
+
 function assertContractSemantics(contract: YuanshengCraftContractV1): void {
   inspectPaths(contract);
   switch (contract.artifact_type) {
@@ -246,6 +263,7 @@ function assertContractSemantics(contract: YuanshengCraftContractV1): void {
       assertRefType(contract.manifest_ref, "verification-manifest");
       break;
     case "phase-command-manifest":
+      assertRefType(contract.repository_binding_ref, "repository-binding");
       assertUnique(
         contract.commands.map((command) => command.command_id),
         "phase command ID",
@@ -290,19 +308,71 @@ function assertContractSemantics(contract: YuanshengCraftContractV1): void {
       }
       break;
     case "workflow-state": {
+      const activeDigests = new Set(contract.artifact_refs.map((ref) => ref.digest));
       assertUnique(
         contract.artifact_refs.map((ref) => ref.digest),
         "workflow artifact reference",
       );
       assertUnique(
+        contract.stale_artifact_refs.map((ref) => ref.digest),
+        "stale workflow artifact reference",
+      );
+      if (contract.stale_artifact_refs.some((ref) => activeDigests.has(ref.digest))) {
+        fail("semantic-invalid", "A workflow artifact cannot be both active and stale");
+      }
+      assertUnique(
         contract.principal_audit.map((principal) => principal.session_id),
         "workflow principal session ID",
       );
+      if (
+        contract.coordinator.agent_id !== "ys-craft" ||
+        !contract.principal_audit.some((principal) =>
+          samePrincipal(principal, contract.coordinator),
+        )
+      ) {
+        fail("semantic-invalid", "Workflow coordinator must be an audited ys-craft principal");
+      }
+      const phasePrincipal = contract.phase_principal;
+      if (
+        phasePrincipal !== null &&
+        (!contract.principal_audit.some((principal) => samePrincipal(principal, phasePrincipal)) ||
+          contract.phase === "blocked" ||
+          contract.phase === "completed" ||
+          PHASE_OWNER[contract.phase] !== phasePrincipal.agent_id)
+      ) {
+        fail("semantic-invalid", "Workflow phase principal does not own the active phase");
+      }
+      if (contract.entry_context.strategy !== contract.entry_strategy) {
+        fail("semantic-invalid", "Workflow entry strategy and context must agree");
+      }
+      assertRefType(contract.entry_context.repository_binding_ref, "repository-binding");
+      const entryRefs =
+        contract.entry_context.strategy === "root-cause-import"
+          ? [
+              contract.entry_context.repository_binding_ref,
+              contract.entry_context.review_subject_ref,
+              contract.entry_context.attestation_ref,
+              contract.entry_context.root_cause_ref,
+            ]
+          : [contract.entry_context.repository_binding_ref];
+      if (entryRefs.some((ref) => !activeDigests.has(ref.digest))) {
+        fail("semantic-invalid", "Workflow entry evidence must remain active");
+      }
+      if (contract.entry_context.strategy === "root-cause-import") {
+        assertRefType(contract.entry_context.review_subject_ref, "blueprint-review-subject");
+        assertRefType(contract.entry_context.attestation_ref, "blueprint-review-attestation");
+        assertRefType(contract.entry_context.root_cause_ref, "root-cause");
+      }
       const terminalPhase = contract.phase === "blocked" || contract.phase === "completed";
       if (
         (contract.status === "blocked") !== (contract.phase === "blocked") ||
         (contract.status === "completed") !== (contract.phase === "completed") ||
         (contract.status === "active" && terminalPhase) ||
+        (contract.phase === "blocked") !== (contract.blocked_context !== null) ||
+        (contract.phase === "completed") !== (contract.completed_at !== null) ||
+        (contract.completed_at !== null &&
+          Date.parse(contract.completed_at) !== Date.parse(contract.updated_at)) ||
+        (terminalPhase && contract.phase_principal !== null) ||
         Date.parse(contract.updated_at) < Date.parse(contract.created_at)
       ) {
         fail("semantic-invalid", "Workflow status, phase, and timestamps are inconsistent");
@@ -672,6 +742,44 @@ export function validateCraftContractGraph(
         candidate.diff_content_digest !== contract.delivery_patch_digest
       ) {
         fail("reference-mismatch", "Delivery must bind the exact candidate plan and patch digest");
+      }
+    } else if (contract.artifact_type === "workflow-state") {
+      const entry = contract.entry_context;
+      getContract(index, entry.repository_binding_ref, "repository-binding");
+      if (entry.strategy === "root-cause-import") {
+        const subject = getContract(index, entry.review_subject_ref, "blueprint-review-subject");
+        const attestation = getContract(
+          index,
+          entry.attestation_ref,
+          "blueprint-review-attestation",
+        );
+        const rootCause = getContract(index, entry.root_cause_ref, "root-cause");
+        if (
+          attestation.action !== "allow" ||
+          attestation.review_subject_ref.digest !== subject.artifact_digest ||
+          rootCause.entry_strategy !== "root-cause-import" ||
+          rootCause.provenance.source !== "root-cause-blueprint" ||
+          rootCause.provenance.blueprint.attestation_ref.digest !== attestation.artifact_digest ||
+          rootCause.provenance.blueprint.review_subject_ref.digest !== subject.artifact_digest
+        ) {
+          fail(
+            "reference-mismatch",
+            "Imported workflow entry does not bind its allowed Blueprint evidence chain",
+          );
+        }
+      } else {
+        for (const ref of contract.artifact_refs) {
+          if (ref.artifact_type !== "root-cause") {
+            continue;
+          }
+          const rootCause = getContract(index, ref, "root-cause");
+          if (
+            rootCause.entry_strategy !== "problem-description" ||
+            rootCause.provenance.source !== "problem-description"
+          ) {
+            fail("reference-mismatch", "Problem workflow cannot activate an imported root cause");
+          }
+        }
       }
     }
   }

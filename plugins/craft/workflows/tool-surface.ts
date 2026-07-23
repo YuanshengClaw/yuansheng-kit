@@ -1,17 +1,7 @@
 import { CRAFT_ENTRY_STRATEGIES } from "./entry-strategies/catalog";
+import { WORKFLOW_PHASES } from "./state-machine/phases";
 
-export const CRAFT_WORKFLOW_PHASES = Object.freeze([
-  "pre_workflow",
-  "intake",
-  "root_cause",
-  "planning",
-  "building",
-  "verifying",
-  "reviewing",
-  "delivering",
-  "completed",
-  "blocked",
-] as const);
+export const CRAFT_WORKFLOW_PHASES = Object.freeze(["pre_workflow", ...WORKFLOW_PHASES] as const);
 
 export type CraftWorkflowPhase = (typeof CRAFT_WORKFLOW_PHASES)[number];
 

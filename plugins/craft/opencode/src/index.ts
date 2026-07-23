@@ -31,6 +31,50 @@ export {
   buildBlueprintReviewSubject,
   reviewBlueprintForImport,
 } from "../../workflows/blueprint-import/transaction";
+export type {
+  BlockWorkflowInput,
+  CreateBlueprintWorkflowInput,
+  CreateProblemWorkflowInput,
+  RecordPhaseArtifactInput,
+  ReturnWorkflowInput,
+  TransitionWorkflowInput,
+  WorkflowGuardCode,
+} from "../../workflows/state-machine/engine";
+export {
+  activeRootCause,
+  assertPhaseArtifactWrite,
+  bindPhasePrincipal,
+  blockWorkflow,
+  createBlueprintWorkflowState,
+  createProblemWorkflowState,
+  recordPhaseArtifact,
+  remediateBlockedWorkflow,
+  returnWorkflowToPhase,
+  transitionWorkflow,
+} from "../../workflows/state-machine/engine";
+export type { AuthorizedPhaseCommand } from "../../workflows/state-machine/phase-commands";
+export { authorizePhaseCommandExecution } from "../../workflows/state-machine/phase-commands";
+export type {
+  ActiveWorkflowPhase,
+  RemediationPhase,
+  WorkflowPhase,
+  YsCraftAgentId,
+} from "../../workflows/state-machine/phases";
+export {
+  FORWARD_TRANSITION,
+  PHASE_OWNED_ARTIFACTS,
+  PHASE_OWNER,
+  WORKFLOW_PHASES,
+  YS_CRAFT_AGENT_IDS,
+} from "../../workflows/state-machine/phases";
+export type { TrustedPrincipal } from "../../workflows/state-machine/principal";
+export {
+  auditTrustedPrincipal,
+  issueTrustedPrincipal,
+  principalsEqual,
+} from "../../workflows/state-machine/principal";
+export type { StopGateResult } from "../../workflows/state-machine/stop-gate";
+export { evaluateStopGate } from "../../workflows/state-machine/stop-gate";
 
 const TOOL_DESCRIPTIONS = Object.freeze(
   Object.fromEntries(

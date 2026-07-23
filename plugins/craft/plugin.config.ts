@@ -89,6 +89,69 @@ export default {
       },
       requires: ["craft-contract-schema"],
     },
+    "craft-state-machine-engine": {
+      kind: "workflow",
+      logicalPath: "workflows/state-machine/engine.ts",
+      source: {
+        kind: "file",
+        path: "plugins/craft/workflows/state-machine/engine.ts",
+      },
+      requires: [
+        "craft-blueprint-import-transaction",
+        "craft-contract-canonical",
+        "craft-contract-generated-index",
+        "craft-contract-parser",
+        "craft-contract-strict-json",
+        "craft-state-machine-phases",
+        "craft-state-machine-principal",
+      ],
+    },
+    "craft-state-machine-phase-commands": {
+      kind: "workflow",
+      logicalPath: "workflows/state-machine/phase-commands.ts",
+      source: {
+        kind: "file",
+        path: "plugins/craft/workflows/state-machine/phase-commands.ts",
+      },
+      requires: [
+        "craft-contract-canonical",
+        "craft-contract-generated-index",
+        "craft-contract-parser",
+        "craft-state-machine-principal",
+      ],
+    },
+    "craft-state-machine-phases": {
+      kind: "workflow",
+      logicalPath: "workflows/state-machine/phases.ts",
+      source: {
+        kind: "file",
+        path: "plugins/craft/workflows/state-machine/phases.ts",
+      },
+      requires: ["craft-contract-generated-index"],
+    },
+    "craft-state-machine-principal": {
+      kind: "workflow",
+      logicalPath: "workflows/state-machine/principal.ts",
+      source: {
+        kind: "file",
+        path: "plugins/craft/workflows/state-machine/principal.ts",
+      },
+      requires: ["craft-contract-generated-index", "craft-state-machine-phases"],
+    },
+    "craft-state-machine-stop-gate": {
+      kind: "workflow",
+      logicalPath: "workflows/state-machine/stop-gate.ts",
+      source: {
+        kind: "file",
+        path: "plugins/craft/workflows/state-machine/stop-gate.ts",
+      },
+      requires: [
+        "craft-contract-canonical",
+        "craft-contract-generated-index",
+        "craft-contract-parser",
+        "craft-state-machine-principal",
+      ],
+    },
     "craft-blueprint-import-transaction": {
       kind: "workflow",
       logicalPath: "workflows/blueprint-import/transaction.ts",
@@ -126,7 +189,11 @@ export default {
         kind: "file",
         path: "plugins/craft/workflows/tool-surface.ts",
       },
-      requires: ["craft-entry-strategies", "craft-tool-surface-schema"],
+      requires: [
+        "craft-entry-strategies",
+        "craft-state-machine-phases",
+        "craft-tool-surface-schema",
+      ],
     },
     "craft-tool-surface-schema": {
       kind: "workflow-schema",
@@ -170,6 +237,11 @@ export default {
         "craft-blueprint-import-transaction",
         "craft-blueprint-import-verifier",
         "craft-contract-parser",
+        "craft-state-machine-engine",
+        "craft-state-machine-phase-commands",
+        "craft-state-machine-phases",
+        "craft-state-machine-principal",
+        "craft-state-machine-stop-gate",
         "craft-tool-surface",
       ],
     },

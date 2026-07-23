@@ -209,8 +209,11 @@ export type PhaseCommandManifest = ArtifactBase &
      * @minItems 1
      */
     commands: [PhaseCommand, ...PhaseCommand[]];
-    phase: "planning" | "building" | "verifying" | "reviewing" | "delivering";
+    phase: "planning" | "root_cause";
+    output_root_realpath: Realpath;
+    repository_binding_ref: ArtifactRef;
     subject_ref: ArtifactRef;
+    target_access: "read-only";
   };
 export type PhaseCommandAuthorization = ArtifactBase &
   WorkflowArtifactBase & {
@@ -269,6 +272,10 @@ export type WorkflowState = ArtifactBase &
   WorkflowArtifactBase & {
     artifact_refs: ArtifactRef[];
     artifact_type: "workflow-state";
+    blocked_context: BlockedWorkflowContext | null;
+    completed_at: UtcTime | null;
+    coordinator: PrincipalAudit;
+    entry_context: WorkflowEntryContext;
     entry_strategy: "problem-description" | "root-cause-import";
     phase:
       | "blocked"
@@ -280,14 +287,29 @@ export type WorkflowState = ArtifactBase &
       | "reviewing"
       | "root_cause"
       | "verifying";
+    phase_principal: PrincipalAudit | null;
     /**
      * @minItems 1
      */
     principal_audit: [PrincipalAudit, ...PrincipalAudit[]];
     revision: number;
+    stale_artifact_refs: ArtifactRef[];
     status: "active" | "blocked" | "completed";
     updated_at: UtcTime;
   };
+export type WorkflowEntryContext =
+  | {
+      problem: NonEmptyString;
+      repository_binding_ref: ArtifactRef;
+      strategy: "problem-description";
+    }
+  | {
+      attestation_ref: ArtifactRef;
+      repository_binding_ref: ArtifactRef;
+      review_subject_ref: ArtifactRef;
+      root_cause_ref: ArtifactRef;
+      strategy: "root-cause-import";
+    };
 export type ActionJournal = ArtifactBase &
   WorkflowArtifactBase & {
     artifact_type: "action-journal";
@@ -421,11 +443,25 @@ export interface PhaseCommand {
   argv: [NonEmptyString, ...NonEmptyString[]];
   command_id: OpaqueId;
   cwd: RelativePath;
+  environment_allowlist: string[];
+  timeout_seconds: number;
 }
 export interface ReviewFinding {
   finding_id: OpaqueId;
   severity: "blocking" | "note" | "warning";
   summary: NonEmptyString;
+}
+export interface BlockedWorkflowContext {
+  from_phase:
+    | "building"
+    | "delivering"
+    | "intake"
+    | "planning"
+    | "reviewing"
+    | "root_cause"
+    | "verifying";
+  reason: NonEmptyString;
+  remediation_phase: "building" | "planning" | "root_cause" | "verifying";
 }
 export interface ActionJournalEntry {
   action: string;

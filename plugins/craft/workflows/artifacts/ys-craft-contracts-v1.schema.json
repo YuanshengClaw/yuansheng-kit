@@ -141,6 +141,80 @@
         }
       }
     },
+    "workflow_entry_context": {
+      "title": "WorkflowEntryContext",
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["problem", "repository_binding_ref", "strategy"],
+          "properties": {
+            "problem": {
+              "$ref": "#/$defs/non_empty_string"
+            },
+            "repository_binding_ref": {
+              "$ref": "#/$defs/artifact_ref"
+            },
+            "strategy": {
+              "const": "problem-description"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "attestation_ref",
+            "repository_binding_ref",
+            "review_subject_ref",
+            "root_cause_ref",
+            "strategy"
+          ],
+          "properties": {
+            "attestation_ref": {
+              "$ref": "#/$defs/artifact_ref"
+            },
+            "repository_binding_ref": {
+              "$ref": "#/$defs/artifact_ref"
+            },
+            "review_subject_ref": {
+              "$ref": "#/$defs/artifact_ref"
+            },
+            "root_cause_ref": {
+              "$ref": "#/$defs/artifact_ref"
+            },
+            "strategy": {
+              "const": "root-cause-import"
+            }
+          }
+        }
+      ]
+    },
+    "blocked_context": {
+      "title": "BlockedWorkflowContext",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["from_phase", "reason", "remediation_phase"],
+      "properties": {
+        "from_phase": {
+          "enum": [
+            "building",
+            "delivering",
+            "intake",
+            "planning",
+            "reviewing",
+            "root_cause",
+            "verifying"
+          ]
+        },
+        "reason": {
+          "$ref": "#/$defs/non_empty_string"
+        },
+        "remediation_phase": {
+          "enum": ["building", "planning", "root_cause", "verifying"]
+        }
+      }
+    },
     "artifact_base": {
       "title": "ArtifactBase",
       "type": "object",
@@ -1112,7 +1186,7 @@
       "title": "PhaseCommand",
       "type": "object",
       "additionalProperties": false,
-      "required": ["argv", "command_id", "cwd"],
+      "required": ["argv", "command_id", "cwd", "environment_allowlist", "timeout_seconds"],
       "properties": {
         "argv": {
           "type": "array",
@@ -1126,6 +1200,19 @@
         },
         "cwd": {
           "$ref": "#/$defs/relative_path"
+        },
+        "environment_allowlist": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Z_][A-Z0-9_]*$"
+          }
+        },
+        "timeout_seconds": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 86400
         }
       }
     },
@@ -1141,7 +1228,15 @@
         },
         {
           "type": "object",
-          "required": ["artifact_type", "commands", "phase", "subject_ref"],
+          "required": [
+            "artifact_type",
+            "commands",
+            "output_root_realpath",
+            "phase",
+            "repository_binding_ref",
+            "subject_ref",
+            "target_access"
+          ],
           "properties": {
             "artifact_type": {
               "const": "phase-command-manifest"
@@ -1154,10 +1249,19 @@
               }
             },
             "phase": {
-              "enum": ["planning", "building", "verifying", "reviewing", "delivering"]
+              "enum": ["planning", "root_cause"]
+            },
+            "output_root_realpath": {
+              "$ref": "#/$defs/realpath"
+            },
+            "repository_binding_ref": {
+              "$ref": "#/$defs/artifact_ref"
             },
             "subject_ref": {
               "$ref": "#/$defs/artifact_ref"
+            },
+            "target_access": {
+              "const": "read-only"
             }
           }
         }
@@ -1419,12 +1523,18 @@
         {
           "type": "object",
           "required": [
+            "blocked_context",
+            "completed_at",
+            "coordinator",
+            "entry_context",
             "artifact_refs",
             "artifact_type",
             "entry_strategy",
             "phase",
+            "phase_principal",
             "principal_audit",
             "revision",
+            "stale_artifact_refs",
             "status",
             "updated_at"
           ],
@@ -1438,6 +1548,32 @@
             },
             "artifact_type": {
               "const": "workflow-state"
+            },
+            "blocked_context": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/blocked_context"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "completed_at": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/utc_time"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "coordinator": {
+              "$ref": "#/$defs/principal"
+            },
+            "entry_context": {
+              "$ref": "#/$defs/workflow_entry_context"
             },
             "entry_strategy": {
               "enum": ["problem-description", "root-cause-import"]
@@ -1455,6 +1591,16 @@
                 "verifying"
               ]
             },
+            "phase_principal": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/principal"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
             "principal_audit": {
               "type": "array",
               "minItems": 1,
@@ -1465,6 +1611,13 @@
             "revision": {
               "type": "integer",
               "minimum": 0
+            },
+            "stale_artifact_refs": {
+              "type": "array",
+              "uniqueItems": true,
+              "items": {
+                "$ref": "#/$defs/artifact_ref"
+              }
             },
             "status": {
               "enum": ["active", "blocked", "completed"]

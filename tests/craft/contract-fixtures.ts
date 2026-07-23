@@ -371,11 +371,16 @@ export function makeCompleteContractGraph(): CompleteContractGraph {
         argv: ["bun", "test"],
         command_id: "command:PHASE12345678901",
         cwd: "tests",
+        environment_allowlist: ["CI"],
+        timeout_seconds: 300,
       },
     ],
     created_at: "2026-07-24T08:11:00.000Z",
-    phase: "verifying",
-    subject_ref: artifactRef(candidate),
+    output_root_realpath: "/workspace/output",
+    phase: "planning",
+    repository_binding_ref: artifactRef(binding),
+    subject_ref: artifactRef(plan),
+    target_access: "read-only",
     workflow_id: WORKFLOW_ID,
   });
   const phaseAuthorization = makeContract<PhaseCommandAuthorization>({
@@ -385,8 +390,8 @@ export function makeCompleteContractGraph(): CompleteContractGraph {
     created_at: "2026-07-24T08:12:00.000Z",
     manifest_ref: artifactRef(phaseManifest),
     principal: {
-      agent_id: "ys-craft-regression-verifier",
-      session_id: "session:VERIFIER12345678",
+      agent_id: "ys-craft-patch-planner",
+      session_id: "session:PLANNER123456789",
     },
     workflow_id: WORKFLOW_ID,
   });
@@ -438,6 +443,9 @@ export function makeCompleteContractGraph(): CompleteContractGraph {
   });
   const state = makeContract<WorkflowState>({
     artifact_refs: [
+      artifactRef(binding),
+      artifactRef(subject),
+      artifactRef(attestation),
       artifactRef(rootCause),
       artifactRef(plan),
       artifactRef(candidate),
@@ -446,10 +454,28 @@ export function makeCompleteContractGraph(): CompleteContractGraph {
     ],
     artifact_type: "workflow-state",
     artifact_version: 1,
+    blocked_context: null,
+    completed_at: "2026-07-24T08:16:00.000Z",
+    coordinator: {
+      agent_id: "ys-craft",
+      session_id: "session:PRIMARY1234567890",
+    },
     created_at: CREATED_AT,
+    entry_context: {
+      attestation_ref: artifactRef(attestation),
+      repository_binding_ref: artifactRef(binding),
+      review_subject_ref: artifactRef(subject),
+      root_cause_ref: artifactRef(rootCause),
+      strategy: "root-cause-import",
+    },
     entry_strategy: "root-cause-import",
     phase: "completed",
+    phase_principal: null,
     principal_audit: [
+      {
+        agent_id: "ys-craft",
+        session_id: "session:PRIMARY1234567890",
+      },
       {
         agent_id: "ys-craft-patch-builder",
         session_id: BUILDER_SESSION_ID,
@@ -460,6 +486,7 @@ export function makeCompleteContractGraph(): CompleteContractGraph {
       },
     ],
     revision: 12,
+    stale_artifact_refs: [],
     status: "completed",
     updated_at: "2026-07-24T08:16:00.000Z",
     workflow_id: WORKFLOW_ID,
