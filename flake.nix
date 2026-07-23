@@ -344,6 +344,131 @@
                     )
                   ];
                 }).config.system.build.vm;
+
+              riscv64-nixos =
+                (nixpkgs.lib.nixosSystem {
+                  modules = [
+                    {
+                      nixpkgs = {
+                        buildPlatform = system;
+                        hostPlatform = "riscv64-linux";
+                      };
+
+                      virtualisation = {
+                        host = {
+                          inherit
+                            pkgs
+                            ;
+                        };
+                      };
+                    }
+                    "${nixpkgs}/nixos/modules/virtualisation/qemu-vm.nix"
+                    (
+                      {
+                        lib,
+                        ...
+                      }:
+                      let
+                        inherit (lib)
+                          mkForce
+                          ;
+                      in
+                      {
+                        networking = {
+                          defaultGateway = {
+                            address = "192.168.95.1";
+                            interface = "eth0";
+                          };
+
+                          firewall = {
+                            allowedTCPPorts = [
+                              22
+                            ];
+                          };
+
+                          hostName = "riscv64-nixos";
+
+                          interfaces = {
+                            eth0 = {
+                              ipv4 = {
+                                addresses = [
+                                  {
+                                    address = "192.168.95.10";
+                                    prefixLength = 24;
+                                  }
+                                ];
+                              };
+
+                              useDHCP = false;
+                            };
+                          };
+
+                          nameservers = [
+                            "1.1.1.1"
+                            "8.8.8.8"
+                          ];
+
+                          useDHCP = false;
+                        };
+
+                        services = {
+                          openssh = {
+                            enable = true;
+                            openFirewall = true;
+
+                            settings = {
+                              PasswordAuthentication = true;
+                              PermitRootLogin = "no";
+                            };
+                          };
+                        };
+
+                        system = {
+                          name = "riscv64-nixos";
+                          stateVersion = "26.05";
+                        };
+
+                        users = {
+                          groups = {
+                            test = {
+                              gid = 1000;
+                            };
+                          };
+
+                          mutableUsers = false;
+
+                          users = {
+                            test = {
+                              createHome = true;
+                              extraGroups = [
+                                "wheel"
+                              ];
+                              group = "test";
+                              home = "/home/test";
+                              initialPassword = "test";
+                              isNormalUser = true;
+                              uid = 1000;
+                            };
+                          };
+                        };
+
+                        virtualisation = {
+                          cores = 4;
+                          diskSize = 20480;
+                          graphics = false;
+                          memorySize = 4096;
+
+                          qemu = {
+                            networkingOptions = mkForce [
+                              "-netdev tap,id=net0,ifname=riscv64-nixos,script=no,downscript=no"
+                              "-device virtio-net-pci,netdev=net0,mac=52:54:00:95:00:10"
+                            ];
+                          };
+                        };
+                      }
+                    )
+                  ];
+                }).config.system.build.vm;
             };
 
           };
