@@ -3,6 +3,15 @@ import { type Plugin, type ToolDefinition, tool } from "@opencode-ai/plugin";
 
 import { CRAFT_TOOL_SURFACE, type CraftToolId } from "../../workflows/tool-surface";
 
+export type * from "../../workflows/artifacts/generated";
+export {
+  artifactRef,
+  assertBlueprintPlanningEligible,
+  parseCraftContractBytes,
+  parseCraftContractGraph,
+  validateCraftContractGraph,
+} from "../../workflows/artifacts/parser";
+
 const TOOL_DESCRIPTIONS = Object.freeze(
   Object.fromEntries(
     CRAFT_TOOL_SURFACE.map((definition) => [

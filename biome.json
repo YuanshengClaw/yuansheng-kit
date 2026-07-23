@@ -67,7 +67,10 @@
       }
     },
     {
-      "includes": ["tools/yuansheng-root-cause-blueprint/src/generated/validators.ts"],
+      "includes": [
+        "plugins/craft/workflows/artifacts/generated/validators.ts",
+        "tools/yuansheng-root-cause-blueprint/src/generated/validators.ts"
+      ],
       "linter": {
         "enabled": false
       }

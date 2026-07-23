@@ -17,6 +17,13 @@ const EXPECTED_PLUGIN_ID = "craft";
 const EXPECTED_PLATFORM_ID = "opencode";
 const EXPECTED_ARTIFACT_NAME = "opencode-ys-craft";
 const EXPECTED_PRIMARY_AGENT = "ys-craft";
+const EXPECTED_RUNTIME_DEPENDENCIES = Object.freeze({
+  "@opencode-ai/plugin": "1.18.4",
+  ajv: "8.20.0",
+  "ajv-formats": "3.0.1",
+  canonicalize: "3.0.0",
+  "jsonc-parser": "3.3.1",
+});
 
 type PermissionAction = "allow" | "ask" | "deny";
 
@@ -344,14 +351,27 @@ async function validateRuntimePackage(
   }
   const dependencies = requireRecord(packageRecord.dependencies, "runtime package dependencies");
   const names = Object.keys(dependencies).sort();
-  if (names.length !== 1 || names[0] !== "@opencode-ai/plugin") {
-    fail("runtime package must contain only the locked OpenCode SDK dependency");
+  const expectedNames = Object.keys(EXPECTED_RUNTIME_DEPENDENCIES).sort();
+  if (
+    names.length !== expectedNames.length ||
+    names.some((name, index) => name !== expectedNames[index])
+  ) {
+    fail("runtime package dependencies must match the locked Craft runtime set");
   }
-  const version = dependencies["@opencode-ai/plugin"];
-  if (version !== "1.18.4" || !SAFE_PACKAGE_NAME.test(names[0])) {
-    fail("runtime package must pin @opencode-ai/plugin to 1.18.4");
-  }
-  return Object.freeze([Object.freeze({ name: names[0], version })]);
+  return Object.freeze(
+    names.map((name) => {
+      const version = dependencies[name];
+      if (
+        typeof version !== "string" ||
+        version !==
+          EXPECTED_RUNTIME_DEPENDENCIES[name as keyof typeof EXPECTED_RUNTIME_DEPENDENCIES] ||
+        !SAFE_PACKAGE_NAME.test(name)
+      ) {
+        fail(`runtime package must pin ${name} to the selected project version`);
+      }
+      return Object.freeze({ name, version });
+    }),
+  );
 }
 
 async function assembleOpenCode(assembly: ResolvedAssemblyV1): Promise<PlatformAssemblyPlanV1> {

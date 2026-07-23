@@ -1,0 +1,1420 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:yuansheng-kit:plugins:craft:contracts:v1",
+  "title": "Yuansheng Craft Contract v1",
+  "description": "Platform-neutral, content-addressed workflow contracts for Yuansheng Craft.",
+  "oneOf": [
+    {
+      "$ref": "#/$defs/root_cause_artifact"
+    },
+    {
+      "$ref": "#/$defs/blueprint_review_subject"
+    },
+    {
+      "$ref": "#/$defs/blueprint_review_attestation"
+    },
+    {
+      "$ref": "#/$defs/repository_binding"
+    },
+    {
+      "$ref": "#/$defs/patch_plan"
+    },
+    {
+      "$ref": "#/$defs/mutation_authorization"
+    },
+    {
+      "$ref": "#/$defs/diff_manifest"
+    },
+    {
+      "$ref": "#/$defs/patch_candidate"
+    },
+    {
+      "$ref": "#/$defs/verification_source"
+    },
+    {
+      "$ref": "#/$defs/verification_manifest"
+    },
+    {
+      "$ref": "#/$defs/verification_authorization"
+    },
+    {
+      "$ref": "#/$defs/phase_command_manifest"
+    },
+    {
+      "$ref": "#/$defs/phase_command_authorization"
+    },
+    {
+      "$ref": "#/$defs/criterion_evidence"
+    },
+    {
+      "$ref": "#/$defs/patch_review"
+    },
+    {
+      "$ref": "#/$defs/delivery"
+    },
+    {
+      "$ref": "#/$defs/workflow_state"
+    },
+    {
+      "$ref": "#/$defs/action_journal"
+    }
+  ],
+  "$defs": {
+    "artifact_type": {
+      "enum": [
+        "root-cause",
+        "blueprint-review-subject",
+        "blueprint-review-attestation",
+        "repository-binding",
+        "patch-plan",
+        "mutation-authorization",
+        "diff-manifest",
+        "patch-candidate",
+        "verification-source",
+        "verification-manifest",
+        "verification-authorization",
+        "phase-command-manifest",
+        "phase-command-authorization",
+        "criterion-evidence",
+        "patch-review",
+        "delivery",
+        "workflow-state",
+        "action-journal"
+      ]
+    },
+    "digest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "opaque_id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]*:[A-Za-z0-9_-]{16,128}$"
+    },
+    "non_empty_string": {
+      "type": "string",
+      "minLength": 1
+    },
+    "utc_time": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(?:\\.[0-9]{3})?Z$"
+    },
+    "relative_path": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.?(?:/|$))(?!.*//)(?!.*\\\\)[^\\u0000]+$"
+    },
+    "realpath": {
+      "type": "string",
+      "minLength": 2,
+      "pattern": "^/(?!.*(?:^|/)\\.\\.?(?:/|$))(?!.*//)(?!.*\\\\)[^\\u0000]+$"
+    },
+    "artifact_ref": {
+      "title": "ArtifactRef",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["artifact_type", "artifact_version", "digest"],
+      "properties": {
+        "artifact_type": {
+          "$ref": "#/$defs/artifact_type"
+        },
+        "artifact_version": {
+          "const": 1
+        },
+        "digest": {
+          "$ref": "#/$defs/digest"
+        }
+      }
+    },
+    "principal": {
+      "title": "PrincipalAudit",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["agent_id", "session_id"],
+      "properties": {
+        "agent_id": {
+          "type": "string",
+          "pattern": "^ys-craft(?:-[a-z][a-z0-9-]*)?$"
+        },
+        "session_id": {
+          "$ref": "#/$defs/opaque_id"
+        }
+      }
+    },
+    "artifact_base": {
+      "title": "ArtifactBase",
+      "type": "object",
+      "required": ["artifact_digest", "artifact_type", "artifact_version", "created_at"],
+      "properties": {
+        "artifact_digest": {
+          "$ref": "#/$defs/digest"
+        },
+        "artifact_type": {
+          "$ref": "#/$defs/artifact_type"
+        },
+        "artifact_version": {
+          "const": 1
+        },
+        "created_at": {
+          "$ref": "#/$defs/utc_time"
+        }
+      }
+    },
+    "workflow_base": {
+      "title": "WorkflowArtifactBase",
+      "type": "object",
+      "required": ["workflow_id"],
+      "properties": {
+        "workflow_id": {
+          "$ref": "#/$defs/opaque_id"
+        }
+      }
+    },
+    "root_cause_item": {
+      "title": "RootCauseItem",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "statement"],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/opaque_id"
+        },
+        "statement": {
+          "$ref": "#/$defs/non_empty_string"
+        }
+      }
+    },
+    "observed_fact": {
+      "title": "ObservedFact",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["evidence_refs", "id", "statement"],
+      "properties": {
+        "evidence_refs": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/artifact_ref"
+          }
+        },
+        "id": {
+          "$ref": "#/$defs/opaque_id"
+        },
+        "statement": {
+          "$ref": "#/$defs/non_empty_string"
+        }
+      }
+    },
+    "inference": {
+      "title": "Inference",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["basis_fact_ids", "id", "statement"],
+      "properties": {
+        "basis_fact_ids": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/opaque_id"
+          }
+        },
+        "id": {
+          "$ref": "#/$defs/opaque_id"
+        },
+        "statement": {
+          "$ref": "#/$defs/non_empty_string"
+        }
+      }
+    },
+    "criterion": {
+      "title": "VerificationCriterion",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["fact_ids", "id", "required", "statement"],
+      "properties": {
+        "fact_ids": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/opaque_id"
+          }
+        },
+        "id": {
+          "$ref": "#/$defs/opaque_id"
+        },
+        "required": {
+          "type": "boolean"
+        },
+        "statement": {
+          "$ref": "#/$defs/non_empty_string"
+        }
+      }
+    },
+    "blueprint_provenance": {
+      "title": "BlueprintProvenance",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "attestation_ref",
+        "blueprint_canonical_digest",
+        "blueprint_raw_blob_digest",
+        "review_subject_ref",
+        "sealed_function_directory_digest"
+      ],
+      "properties": {
+        "attestation_ref": {
+          "$ref": "#/$defs/artifact_ref"
+        },
+        "blueprint_canonical_digest": {
+          "$ref": "#/$defs/digest"
+        },
+        "blueprint_raw_blob_digest": {
+          "$ref": "#/$defs/digest"
+        },
+        "review_subject_ref": {
+          "$ref": "#/$defs/artifact_ref"
+        },
+        "sealed_function_directory_digest": {
+          "$ref": "#/$defs/digest"
+        }
+      }
+    },
+    "root_cause_artifact": {
+      "title": "RootCauseArtifact",
+      "type": "object",
+      "allOf": [
+        {
+          "$ref": "#/$defs/artifact_base"
+        },
+        {
+          "$ref": "#/$defs/workflow_base"
+        },
+        {
+          "type": "object",
+          "required": [
+            "artifact_type",
+            "criteria",
+            "entry_strategy",
+            "facts",
+            "gaps",
+            "inferences",
+            "problem_summary",
+            "provenance",
+            "status"
+          ],
+          "properties": {
+            "artifact_type": {
+              "const": "root-cause"
+            },
+            "criteria": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "$ref": "#/$defs/criterion"
+              }
+            },
+            "entry_strategy": {
+              "enum": ["problem-description", "root-cause-import"]
+            },
+            "facts": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "$ref": "#/$defs/observed_fact"
+              }
+            },
+            "gaps": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/root_cause_item"
+              }
+            },
+            "inferences": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/inference"
+              }
+            },
+            "problem_summary": {
+              "$ref": "#/$defs/non_empty_string"
+            },
+            "provenance": {
+              "oneOf": [
+                {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["source", "source_refs"],
+                  "properties": {
+                    "source": {
+                      "const": "problem-description"
+                    },
+                    "source_refs": {
+                      "type": "array",
+                      "minItems": 1,
+                      "uniqueItems": true,
+                      "items": {
+                        "$ref": "#/$defs/artifact_ref"
+                      }
+                    }
+                  }
+                },
+                {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["blueprint", "source"],
+                  "properties": {
+                    "blueprint": {
+                      "$ref": "#/$defs/blueprint_provenance"
+                    },
+                    "source": {
+                      "const": "root-cause-blueprint"
+                    }
+                  }
+                }
+              ]
+            },
+            "status": {
+              "const": "confirmed"
+            }
+          }
+        }
+      ],
+      "unevaluatedProperties": false
+    },
+    "blueprint_review_subject": {
+      "title": "BlueprintReviewSubject",
+      "type": "object",
+      "allOf": [
+        {
+          "$ref": "#/$defs/artifact_base"
+        },
+        {
+          "type": "object",
+          "required": [
+            "artifact_type",
+            "blueprint_canonical_digest",
+            "blueprint_raw_blob_digest",
+            "final_status",
+            "overall_status",
+            "repository_binding_ref",
+            "sealed_function_directory_digest"
+          ],
+          "properties": {
+            "artifact_type": {
+              "const": "blueprint-review-subject"
+            },
+            "blueprint_canonical_digest": {
+              "$ref": "#/$defs/digest"
+            },
+            "blueprint_raw_blob_digest": {
+              "$ref": "#/$defs/digest"
+            },
+            "final_status": {
+              "enum": [
+                "confirmed_root_cause",
+                "probable_root_cause",
+                "insufficient_evidence",
+                "false_alarm"
+              ]
+            },
+            "overall_status": {
+              "enum": ["confirmed", "probable", "insufficient_evidence", "false_alarm"]
+            },
+            "repository_binding_ref": {
+              "$ref": "#/$defs/artifact_ref"
+            },
+            "sealed_function_directory_digest": {
+              "$ref": "#/$defs/digest"
+            }
+          }
+        }
+      ],
+      "unevaluatedProperties": false
+    },
+    "blueprint_review_attestation": {
+      "title": "BlueprintReviewAttestation",
+      "type": "object",
+      "allOf": [
+        {
+          "$ref": "#/$defs/artifact_base"
+        },
+        {
+          "type": "object",
+          "required": [
+            "action",
+            "artifact_type",
+            "blueprint_canonical_digest",
+            "repository_binding_ref",
+            "review_subject_digest",
+            "review_subject_ref",
+            "reviewer_session_id",
+            "sealed_function_directory_digest"
+          ],
+          "properties": {
+            "action": {
+              "enum": ["allow", "deny"]
+            },
+            "artifact_type": {
+              "const": "blueprint-review-attestation"
+            },
+            "blueprint_canonical_digest": {
+              "$ref": "#/$defs/digest"
+            },
+            "repository_binding_ref": {
+              "$ref": "#/$defs/artifact_ref"
+            },
+            "review_subject_digest": {
+              "$ref": "#/$defs/digest"
+            },
+            "review_subject_ref": {
+              "$ref": "#/$defs/artifact_ref"
+            },
+            "reviewer_session_id": {
+              "$ref": "#/$defs/opaque_id"
+            },
+            "sealed_function_directory_digest": {
+              "$ref": "#/$defs/digest"
+            }
+          }
+        }
+      ],
+      "unevaluatedProperties": false
+    },
+    "repository_binding": {
+      "title": "RepositoryBinding",
+      "type": "object",
+      "allOf": [
+        {
+          "$ref": "#/$defs/artifact_base"
+        },
+        {
+          "type": "object",
+          "required": [
+            "artifact_type",
+            "commit_sha",
+            "git_root_realpath",
+            "preparation_mode",
+            "product_root_realpath",
+            "repository_url",
+            "target_worktree_realpath",
+            "tree_digest"
+          ],
+          "properties": {
+            "artifact_type": {
+              "const": "repository-binding"
+            },
+            "commit_sha": {
+              "type": "string",
+              "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$"
+            },
+            "git_root_realpath": {
+              "$ref": "#/$defs/realpath"
+            },
+            "preparation_mode": {
+              "enum": ["managed", "manual"]
+            },
+            "product_root_realpath": {
+              "$ref": "#/$defs/realpath"
+            },
+            "repository_url": {
+              "type": "string",
+              "format": "uri",
+              "pattern": "^(?:https?|ssh)://"
+            },
+            "target_worktree_realpath": {
+              "$ref": "#/$defs/realpath"
+            },
+            "tree_digest": {
+              "$ref": "#/$defs/digest"
+            }
+          }
+        }
+      ],
+      "unevaluatedProperties": false
+    },
+    "planned_change": {
+      "title": "PlannedChange",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "operation", "path", "root_cause_item_ids"],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/opaque_id"
+        },
+        "operation": {
+          "enum": ["create", "delete", "modify"]
+        },
+        "path": {
+          "$ref": "#/$defs/relative_path"
+        },
+        "root_cause_item_ids": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/opaque_id"
+          }
+        }
+      }
+    },
+    "patch_plan": {
+      "title": "PatchPlan",
+      "type": "object",
+      "allOf": [
+        {
+          "$ref": "#/$defs/artifact_base"
+        },
+        {
+          "$ref": "#/$defs/workflow_base"
+        },
+        {
+          "type": "object",
+          "required": [
+            "artifact_type",
+            "changes",
+            "criterion_ids",
+            "non_goals",
+            "objectives",
+            "plan_revision",
+            "root_cause_ref",
+            "status"
+          ],
+          "properties": {
+            "artifact_type": {
+              "const": "patch-plan"
+            },
+            "changes": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "$ref": "#/$defs/planned_change"
+              }
+            },
+            "criterion_ids": {
+              "type": "array",
+              "minItems": 1,
+              "uniqueItems": true,
+              "items": {
+                "$ref": "#/$defs/opaque_id"
+              }
+            },
+            "non_goals": {
+              "type": "array",
+              "uniqueItems": true,
+              "items": {
+                "$ref": "#/$defs/non_empty_string"
+              }
+            },
+            "objectives": {
+              "type": "array",
+              "minItems": 1,
+              "uniqueItems": true,
+              "items": {
+                "$ref": "#/$defs/non_empty_string"
+              }
+            },
+            "plan_revision": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "root_cause_ref": {
+              "$ref": "#/$defs/artifact_ref"
+            },
+            "status": {
+              "const": "approved"
+            }
+          }
+        }
+      ],
+      "unevaluatedProperties": false
+    },
+    "authorized_change": {
+      "title": "AuthorizedChange",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["operation", "path", "planned_change_id"],
+      "properties": {
+        "operation": {
+          "enum": ["create", "delete", "modify"]
+        },
+        "path": {
+          "$ref": "#/$defs/relative_path"
+        },
+        "planned_change_id": {
+          "$ref": "#/$defs/opaque_id"
+        }
+      }
+    },
+    "mutation_authorization": {
+      "title": "MutationAuthorization",
+      "type": "object",
+      "allOf": [
+        {
+          "$ref": "#/$defs/artifact_base"
+        },
+        {
+          "$ref": "#/$defs/workflow_base"
+        },
+        {
+          "type": "object",
+          "required": [
+            "action",
+            "artifact_type",
+            "authorized_changes",
+            "authorized_revision",
+            "plan_ref",
+            "principal"
+          ],
+          "properties": {
+            "action": {
+              "const": "allow"
+            },
+            "artifact_type": {
+              "const": "mutation-authorization"
+            },
+            "authorized_changes": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "$ref": "#/$defs/authorized_change"
+              }
+            },
+            "authorized_revision": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "plan_ref": {
+              "$ref": "#/$defs/artifact_ref"
+            },
+            "principal": {
+              "$ref": "#/$defs/principal"
+            }
+          }
+        }
+      ],
+      "unevaluatedProperties": false
+    },
+    "diff_entry": {
+      "title": "DiffEntry",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["new_blob_digest", "old_blob_digest", "operation", "path"],
+      "properties": {
+        "new_blob_digest": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/digest"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "old_blob_digest": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/digest"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "operation": {
+          "enum": ["create", "delete", "modify"]
+        },
+        "path": {
+          "$ref": "#/$defs/relative_path"
+        }
+      }
+    },
+    "diff_manifest": {
+      "title": "DiffManifest",
+      "type": "object",
+      "allOf": [
+        {
+          "$ref": "#/$defs/artifact_base"
+        },
+        {
+          "$ref": "#/$defs/workflow_base"
+        },
+        {
+          "type": "object",
+          "required": [
+            "artifact_type",
+            "diff_content_digest",
+            "entries",
+            "mutation_authorization_ref",
+            "plan_ref",
+            "repository_binding_ref"
+          ],
+          "properties": {
+            "artifact_type": {
+              "const": "diff-manifest"
+            },
+            "diff_content_digest": {
+              "$ref": "#/$defs/digest"
+            },
+            "entries": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "$ref": "#/$defs/diff_entry"
+              }
+            },
+            "mutation_authorization_ref": {
+              "$ref": "#/$defs/artifact_ref"
+            },
+            "plan_ref": {
+              "$ref": "#/$defs/artifact_ref"
+            },
+            "repository_binding_ref": {
+              "$ref": "#/$defs/artifact_ref"
+            }
+          }
+        }
+      ],
+      "unevaluatedProperties": false
+    },
+    "patch_candidate": {
+      "title": "PatchCandidate",
+      "type": "object",
+      "allOf": [
+        {
+          "$ref": "#/$defs/artifact_base"
+        },
+        {
+          "$ref": "#/$defs/workflow_base"
+        },
+        {
+          "type": "object",
+          "required": [
+            "artifact_type",
+            "candidate_revision",
+            "diff_content_digest",
+            "diff_manifest_ref",
+            "iteration",
+            "plan_ref",
+            "status"
+          ],
+          "properties": {
+            "artifact_type": {
+              "const": "patch-candidate"
+            },
+            "candidate_revision": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "diff_content_digest": {
+              "$ref": "#/$defs/digest"
+            },
+            "diff_manifest_ref": {
+              "$ref": "#/$defs/artifact_ref"
+            },
+            "iteration": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "plan_ref": {
+              "$ref": "#/$defs/artifact_ref"
+            },
+            "status": {
+              "const": "ready-for-verification"
+            }
+          }
+        }
+      ],
+      "unevaluatedProperties": false
+    },
+    "command": {
+      "title": "VerificationCommand",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["argv", "command_id", "criterion_ids", "cwd", "required", "timeout_seconds"],
+      "properties": {
+        "argv": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/non_empty_string"
+          }
+        },
+        "command_id": {
+          "$ref": "#/$defs/opaque_id"
+        },
+        "criterion_ids": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/opaque_id"
+          }
+        },
+        "cwd": {
+          "$ref": "#/$defs/relative_path"
+        },
+        "required": {
+          "type": "boolean"
+        },
+        "timeout_seconds": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 86400
+        }
+      }
+    },
+    "verification_source": {
+      "title": "VerificationSource",
+      "type": "object",
+      "allOf": [
+        {
+          "$ref": "#/$defs/artifact_base"
+        },
+        {
+          "$ref": "#/$defs/workflow_base"
+        },
+        {
+          "type": "object",
+          "required": [
+            "artifact_type",
+            "commands",
+            "plan_ref",
+            "repository_binding_ref",
+            "runner_id",
+            "runner_type"
+          ],
+          "properties": {
+            "artifact_type": {
+              "const": "verification-source"
+            },
+            "commands": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "$ref": "#/$defs/command"
+              }
+            },
+            "plan_ref": {
+              "$ref": "#/$defs/artifact_ref"
+            },
+            "repository_binding_ref": {
+              "$ref": "#/$defs/artifact_ref"
+            },
+            "runner_id": {
+              "$ref": "#/$defs/opaque_id"
+            },
+            "runner_type": {
+              "enum": ["local", "ssh"]
+            }
+          }
+        }
+      ],
+      "unevaluatedProperties": false
+    },
+    "verification_manifest": {
+      "title": "VerificationManifest",
+      "type": "object",
+      "allOf": [
+        {
+          "$ref": "#/$defs/artifact_base"
+        },
+        {
+          "$ref": "#/$defs/workflow_base"
+        },
+        {
+          "type": "object",
+          "required": ["artifact_type", "candidate_ref", "commands", "source_ref"],
+          "properties": {
+            "artifact_type": {
+              "const": "verification-manifest"
+            },
+            "candidate_ref": {
+              "$ref": "#/$defs/artifact_ref"
+            },
+            "commands": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "$ref": "#/$defs/command"
+              }
+            },
+            "source_ref": {
+              "$ref": "#/$defs/artifact_ref"
+            }
+          }
+        }
+      ],
+      "unevaluatedProperties": false
+    },
+    "verification_authorization": {
+      "title": "VerificationAuthorization",
+      "type": "object",
+      "allOf": [
+        {
+          "$ref": "#/$defs/artifact_base"
+        },
+        {
+          "$ref": "#/$defs/workflow_base"
+        },
+        {
+          "type": "object",
+          "required": ["action", "artifact_type", "candidate_ref", "manifest_ref", "principal"],
+          "properties": {
+            "action": {
+              "enum": ["allow", "deny"]
+            },
+            "artifact_type": {
+              "const": "verification-authorization"
+            },
+            "candidate_ref": {
+              "$ref": "#/$defs/artifact_ref"
+            },
+            "manifest_ref": {
+              "$ref": "#/$defs/artifact_ref"
+            },
+            "principal": {
+              "$ref": "#/$defs/principal"
+            }
+          }
+        }
+      ],
+      "unevaluatedProperties": false
+    },
+    "phase_command": {
+      "title": "PhaseCommand",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["argv", "command_id", "cwd"],
+      "properties": {
+        "argv": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/non_empty_string"
+          }
+        },
+        "command_id": {
+          "$ref": "#/$defs/opaque_id"
+        },
+        "cwd": {
+          "$ref": "#/$defs/relative_path"
+        }
+      }
+    },
+    "phase_command_manifest": {
+      "title": "PhaseCommandManifest",
+      "type": "object",
+      "allOf": [
+        {
+          "$ref": "#/$defs/artifact_base"
+        },
+        {
+          "$ref": "#/$defs/workflow_base"
+        },
+        {
+          "type": "object",
+          "required": ["artifact_type", "commands", "phase", "subject_ref"],
+          "properties": {
+            "artifact_type": {
+              "const": "phase-command-manifest"
+            },
+            "commands": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "$ref": "#/$defs/phase_command"
+              }
+            },
+            "phase": {
+              "enum": ["planning", "building", "verifying", "reviewing", "delivering"]
+            },
+            "subject_ref": {
+              "$ref": "#/$defs/artifact_ref"
+            }
+          }
+        }
+      ],
+      "unevaluatedProperties": false
+    },
+    "phase_command_authorization": {
+      "title": "PhaseCommandAuthorization",
+      "type": "object",
+      "allOf": [
+        {
+          "$ref": "#/$defs/artifact_base"
+        },
+        {
+          "$ref": "#/$defs/workflow_base"
+        },
+        {
+          "type": "object",
+          "required": ["action", "artifact_type", "manifest_ref", "principal"],
+          "properties": {
+            "action": {
+              "enum": ["allow", "deny"]
+            },
+            "artifact_type": {
+              "const": "phase-command-authorization"
+            },
+            "manifest_ref": {
+              "$ref": "#/$defs/artifact_ref"
+            },
+            "principal": {
+              "$ref": "#/$defs/principal"
+            }
+          }
+        }
+      ],
+      "unevaluatedProperties": false
+    },
+    "criterion_evidence": {
+      "title": "CriterionEvidence",
+      "type": "object",
+      "allOf": [
+        {
+          "$ref": "#/$defs/artifact_base"
+        },
+        {
+          "$ref": "#/$defs/workflow_base"
+        },
+        {
+          "type": "object",
+          "required": [
+            "artifact_type",
+            "candidate_ref",
+            "criterion_id",
+            "finished_at",
+            "log_digests",
+            "manifest_ref",
+            "runner_id",
+            "started_at",
+            "status"
+          ],
+          "properties": {
+            "artifact_type": {
+              "const": "criterion-evidence"
+            },
+            "candidate_ref": {
+              "$ref": "#/$defs/artifact_ref"
+            },
+            "criterion_id": {
+              "$ref": "#/$defs/opaque_id"
+            },
+            "finished_at": {
+              "$ref": "#/$defs/utc_time"
+            },
+            "log_digests": {
+              "type": "array",
+              "minItems": 1,
+              "uniqueItems": true,
+              "items": {
+                "$ref": "#/$defs/digest"
+              }
+            },
+            "manifest_ref": {
+              "$ref": "#/$defs/artifact_ref"
+            },
+            "runner_id": {
+              "$ref": "#/$defs/opaque_id"
+            },
+            "started_at": {
+              "$ref": "#/$defs/utc_time"
+            },
+            "status": {
+              "enum": ["blocked", "fail", "pass"]
+            }
+          }
+        }
+      ],
+      "unevaluatedProperties": false
+    },
+    "review_finding": {
+      "title": "ReviewFinding",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["finding_id", "severity", "summary"],
+      "properties": {
+        "finding_id": {
+          "$ref": "#/$defs/opaque_id"
+        },
+        "severity": {
+          "enum": ["blocking", "note", "warning"]
+        },
+        "summary": {
+          "$ref": "#/$defs/non_empty_string"
+        }
+      }
+    },
+    "patch_review": {
+      "title": "PatchReview",
+      "type": "object",
+      "allOf": [
+        {
+          "$ref": "#/$defs/artifact_base"
+        },
+        {
+          "$ref": "#/$defs/workflow_base"
+        },
+        {
+          "type": "object",
+          "required": [
+            "artifact_type",
+            "candidate_ref",
+            "criterion_evidence_refs",
+            "findings",
+            "reviewer",
+            "root_cause_eliminated",
+            "status",
+            "verification_sufficient",
+            "within_approved_scope"
+          ],
+          "properties": {
+            "artifact_type": {
+              "const": "patch-review"
+            },
+            "candidate_ref": {
+              "$ref": "#/$defs/artifact_ref"
+            },
+            "criterion_evidence_refs": {
+              "type": "array",
+              "minItems": 1,
+              "uniqueItems": true,
+              "items": {
+                "$ref": "#/$defs/artifact_ref"
+              }
+            },
+            "findings": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/review_finding"
+              }
+            },
+            "reviewer": {
+              "$ref": "#/$defs/principal"
+            },
+            "root_cause_eliminated": {
+              "type": "boolean"
+            },
+            "status": {
+              "enum": ["fail", "pass"]
+            },
+            "verification_sufficient": {
+              "type": "boolean"
+            },
+            "within_approved_scope": {
+              "type": "boolean"
+            }
+          }
+        }
+      ],
+      "unevaluatedProperties": false
+    },
+    "delivery": {
+      "title": "Delivery",
+      "type": "object",
+      "allOf": [
+        {
+          "$ref": "#/$defs/artifact_base"
+        },
+        {
+          "$ref": "#/$defs/workflow_base"
+        },
+        {
+          "type": "object",
+          "required": [
+            "artifact_type",
+            "candidate_ref",
+            "criterion_evidence_refs",
+            "delivery_patch_digest",
+            "patch_review_ref",
+            "plan_ref",
+            "residual_risks",
+            "root_cause_ref",
+            "status",
+            "summary"
+          ],
+          "properties": {
+            "artifact_type": {
+              "const": "delivery"
+            },
+            "candidate_ref": {
+              "$ref": "#/$defs/artifact_ref"
+            },
+            "criterion_evidence_refs": {
+              "type": "array",
+              "minItems": 1,
+              "uniqueItems": true,
+              "items": {
+                "$ref": "#/$defs/artifact_ref"
+              }
+            },
+            "delivery_patch_digest": {
+              "$ref": "#/$defs/digest"
+            },
+            "patch_review_ref": {
+              "$ref": "#/$defs/artifact_ref"
+            },
+            "plan_ref": {
+              "$ref": "#/$defs/artifact_ref"
+            },
+            "residual_risks": {
+              "type": "array",
+              "uniqueItems": true,
+              "items": {
+                "$ref": "#/$defs/non_empty_string"
+              }
+            },
+            "root_cause_ref": {
+              "$ref": "#/$defs/artifact_ref"
+            },
+            "status": {
+              "const": "complete"
+            },
+            "summary": {
+              "$ref": "#/$defs/non_empty_string"
+            }
+          }
+        }
+      ],
+      "unevaluatedProperties": false
+    },
+    "workflow_state": {
+      "title": "WorkflowState",
+      "type": "object",
+      "allOf": [
+        {
+          "$ref": "#/$defs/artifact_base"
+        },
+        {
+          "$ref": "#/$defs/workflow_base"
+        },
+        {
+          "type": "object",
+          "required": [
+            "artifact_refs",
+            "artifact_type",
+            "entry_strategy",
+            "phase",
+            "principal_audit",
+            "revision",
+            "status",
+            "updated_at"
+          ],
+          "properties": {
+            "artifact_refs": {
+              "type": "array",
+              "uniqueItems": true,
+              "items": {
+                "$ref": "#/$defs/artifact_ref"
+              }
+            },
+            "artifact_type": {
+              "const": "workflow-state"
+            },
+            "entry_strategy": {
+              "enum": ["problem-description", "root-cause-import"]
+            },
+            "phase": {
+              "enum": [
+                "blocked",
+                "building",
+                "completed",
+                "delivering",
+                "intake",
+                "planning",
+                "reviewing",
+                "root_cause",
+                "verifying"
+              ]
+            },
+            "principal_audit": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "$ref": "#/$defs/principal"
+              }
+            },
+            "revision": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "status": {
+              "enum": ["active", "blocked", "completed"]
+            },
+            "updated_at": {
+              "$ref": "#/$defs/utc_time"
+            }
+          }
+        }
+      ],
+      "unevaluatedProperties": false
+    },
+    "journal_entry": {
+      "title": "ActionJournalEntry",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["action", "at", "principal", "result", "sequence", "subject_refs"],
+      "properties": {
+        "action": {
+          "type": "string",
+          "pattern": "^ys_craft_[a-z][a-z0-9]*(?:_[a-z0-9]+)*$"
+        },
+        "at": {
+          "$ref": "#/$defs/utc_time"
+        },
+        "principal": {
+          "$ref": "#/$defs/principal"
+        },
+        "result": {
+          "enum": ["allowed", "blocked", "denied", "failed", "succeeded"]
+        },
+        "sequence": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "subject_refs": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/artifact_ref"
+          }
+        }
+      }
+    },
+    "action_journal": {
+      "title": "ActionJournal",
+      "type": "object",
+      "allOf": [
+        {
+          "$ref": "#/$defs/artifact_base"
+        },
+        {
+          "$ref": "#/$defs/workflow_base"
+        },
+        {
+          "type": "object",
+          "required": ["artifact_type", "entries", "revision"],
+          "properties": {
+            "artifact_type": {
+              "const": "action-journal"
+            },
+            "entries": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/journal_entry"
+              }
+            },
+            "revision": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        }
+      ],
+      "unevaluatedProperties": false
+    }
+  }
+}

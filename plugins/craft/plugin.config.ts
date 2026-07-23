@@ -25,6 +25,70 @@ export default {
         path: "plugins/craft/workflows/entry-strategies/catalog.ts",
       },
     },
+    "craft-contract-canonical": {
+      kind: "workflow",
+      logicalPath: "workflows/artifacts/canonical.ts",
+      source: {
+        kind: "file",
+        path: "plugins/craft/workflows/artifacts/canonical.ts",
+      },
+      requires: ["craft-contract-strict-json"],
+    },
+    "craft-contract-generated-index": {
+      kind: "workflow",
+      logicalPath: "workflows/artifacts/generated/index.ts",
+      source: {
+        kind: "file",
+        path: "plugins/craft/workflows/artifacts/generated/index.ts",
+      },
+      requires: ["craft-contract-generated-types", "craft-contract-validator"],
+    },
+    "craft-contract-generated-types": {
+      kind: "workflow",
+      logicalPath: "workflows/artifacts/generated/types/ys-craft-contract-v1.ts",
+      source: {
+        kind: "file",
+        path: "plugins/craft/workflows/artifacts/generated/types/ys-craft-contract-v1.ts",
+      },
+    },
+    "craft-contract-parser": {
+      kind: "workflow",
+      logicalPath: "workflows/artifacts/parser.ts",
+      source: {
+        kind: "file",
+        path: "plugins/craft/workflows/artifacts/parser.ts",
+      },
+      requires: [
+        "craft-contract-canonical",
+        "craft-contract-generated-index",
+        "craft-contract-strict-json",
+      ],
+    },
+    "craft-contract-schema": {
+      kind: "workflow-schema",
+      logicalPath: "workflows/artifacts/ys-craft-contracts-v1.schema.json",
+      source: {
+        kind: "file",
+        path: "plugins/craft/workflows/artifacts/ys-craft-contracts-v1.schema.json",
+      },
+    },
+    "craft-contract-strict-json": {
+      kind: "workflow",
+      logicalPath: "workflows/artifacts/strict-json.ts",
+      source: {
+        kind: "file",
+        path: "plugins/craft/workflows/artifacts/strict-json.ts",
+      },
+    },
+    "craft-contract-validator": {
+      kind: "workflow",
+      logicalPath: "workflows/artifacts/generated/validators.ts",
+      source: {
+        kind: "file",
+        path: "plugins/craft/workflows/artifacts/generated/validators.ts",
+      },
+      requires: ["craft-contract-schema"],
+    },
     "craft-tool-surface": {
       kind: "workflow",
       logicalPath: "workflows/tool-surface.ts",
@@ -72,7 +136,7 @@ export default {
         kind: "file",
         path: "plugins/craft/opencode/src/index.ts",
       },
-      requires: ["craft-tool-surface"],
+      requires: ["craft-contract-parser", "craft-tool-surface"],
     },
     "workflow-coordination-skill": {
       kind: "skill",
@@ -117,7 +181,7 @@ export default {
         runtime: {
           destination: ".opencode/plugins/ys-craft.js",
           entrypointResource: "opencode-runtime-entry",
-          external: ["node:path"],
+          external: ["node:crypto", "node:path"],
           packageResource: "opencode-package",
         },
       } satisfies OpenCodeConfiguration,

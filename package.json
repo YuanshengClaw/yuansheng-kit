@@ -11,8 +11,10 @@
   ],
   "scripts": {
     "bun-nix:generate": "bun2nix -l bun.lock -o bun.nix -c ./",
-    "contracts:check": "bun run tools/yuansheng-root-cause-blueprint/generate.ts --check",
-    "contracts:generate": "bun run tools/yuansheng-root-cause-blueprint/generate.ts --write",
+    "contracts:check": "bun run tools/yuansheng-root-cause-blueprint/generate.ts --check && bun run craft-contracts:check",
+    "contracts:generate": "bun run tools/yuansheng-root-cause-blueprint/generate.ts --write && bun run craft-contracts:generate",
+    "craft-contracts:check": "bun run plugins/craft/workflows/artifacts/generate.ts --check",
+    "craft-contracts:generate": "bun run plugins/craft/workflows/artifacts/generate.ts --write",
     "format": "biome check --write .",
     "lint": "biome ci .",
     "plugin-builder": "bun run tools/plugin-builder/src/cli.ts",
