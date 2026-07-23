@@ -27,6 +27,8 @@ const GROUP_OR_OTHER_WRITE_BITS = 0o022n;
 const STICKY_BIT = 0o1000n;
 
 type DownloadingSshTransportState = Extract<SshTransportState, { phase: "downloading" }>;
+type MaterializedSshTransportState = Extract<SshTransportState, { phase: "staged" }>;
+type SnapshotBoundSshTransportState = DownloadingSshTransportState | MaterializedSshTransportState;
 
 export type LocalSshSnapshotErrorCode =
   | "cleanup_residual"
@@ -98,6 +100,8 @@ type SnapshotPhase = "download_authorized" | "materialized" | "ready" | "residua
 interface SnapshotCapability {
   readonly expected: ExpectedLayout;
   readonly mapping: SshSnapshotMappingEnvelope;
+  materializedDirectories?: ReadonlyMap<string, VerifiedFilesystemIdentity>;
+  materializedObjects?: ReadonlyMap<string, VerifiedFilesystemIdentity>;
   readonly objectsHandle: FileHandle;
   readonly objectsIdentity: BigIntStats;
   readonly objectsPath: string;
@@ -114,10 +118,16 @@ interface SnapshotCapability {
   readonly treePath: string;
 }
 
-interface VerifiedObjectIdentity {
+interface VerifiedFilesystemIdentity {
+  readonly ctimeNs: bigint;
   readonly dev: bigint;
+  readonly gid: bigint;
   readonly ino: bigint;
+  readonly mode: bigint;
+  readonly mtimeNs: bigint;
+  readonly nlink: bigint;
   readonly size: bigint;
+  readonly uid: bigint;
 }
 
 interface CollectedTreeEntries {
@@ -191,6 +201,44 @@ function sameRegularFile(left: BigIntStats, right: BigIntStats): boolean {
     left.mtimeMs === right.mtimeMs &&
     left.ctimeMs === right.ctimeMs
   );
+}
+
+function verifiedFilesystemIdentity(status: BigIntStats): VerifiedFilesystemIdentity {
+  return {
+    ctimeNs: status.ctimeNs,
+    dev: status.dev,
+    gid: status.gid,
+    ino: status.ino,
+    mode: status.mode,
+    mtimeNs: status.mtimeNs,
+    nlink: status.nlink,
+    size: status.size,
+    uid: status.uid,
+  };
+}
+
+function sameVerifiedFilesystemIdentity(
+  left: VerifiedFilesystemIdentity,
+  right: VerifiedFilesystemIdentity,
+): boolean {
+  return (
+    left.ctimeNs === right.ctimeNs &&
+    left.dev === right.dev &&
+    left.gid === right.gid &&
+    left.ino === right.ino &&
+    left.mode === right.mode &&
+    left.mtimeNs === right.mtimeNs &&
+    left.nlink === right.nlink &&
+    left.size === right.size &&
+    left.uid === right.uid
+  );
+}
+
+function sameObjectStorageIdentity(
+  left: VerifiedFilesystemIdentity,
+  right: VerifiedFilesystemIdentity,
+): boolean {
+  return left.dev === right.dev && left.ino === right.ino && left.size === right.size;
 }
 
 function sameDirectorySnapshot(left: BigIntStats, right: BigIntStats): boolean {
@@ -423,9 +471,17 @@ function requireDownloadingState(state: SshTransportState): DownloadingSshTransp
   return state;
 }
 
+function requireMaterializedState(state: SshTransportState): MaterializedSshTransportState {
+  assertApprovedSshTransportState(state);
+  if (state.phase !== "staged") {
+    fail("state_invalid", "The local SSH snapshot requires the staged transport phase");
+  }
+  return state;
+}
+
 function requireCapability(
   handle: LocalSshSnapshotHandle,
-  state: DownloadingSshTransportState,
+  state: SnapshotBoundSshTransportState,
 ): SnapshotCapability {
   const capability = SNAPSHOT_CAPABILITIES.get(handle);
   if (
@@ -643,15 +699,16 @@ async function verifyObjectSet(
   capability: SnapshotCapability,
   signal: AbortSignal,
   setPrivateMode: boolean,
-  requiredIdentities?: ReadonlyMap<string, VerifiedObjectIdentity>,
-): Promise<ReadonlyMap<string, VerifiedObjectIdentity>> {
+  requiredIdentities?: ReadonlyMap<string, VerifiedFilesystemIdentity>,
+  requireExactIdentity = false,
+): Promise<ReadonlyMap<string, VerifiedFilesystemIdentity>> {
   checkCancelled(signal);
   const before = await capability.objectsHandle.stat({ bigint: true });
   const names = await listRawNames(capability.objectsHandle);
   if (names.length !== capability.expected.objects.length) {
     fail("snapshot_mismatch", "The downloaded snapshot object set is incomplete or unexpected");
   }
-  const identities = new Map<string, VerifiedObjectIdentity>();
+  const identities = new Map<string, VerifiedFilesystemIdentity>();
   for (const name of names) {
     checkCancelled(signal);
     const expected = capability.expected.objectsByName.get(name.toString("base64"));
@@ -664,13 +721,13 @@ async function verifyObjectSet(
       signal,
       setPrivateMode,
     );
-    const identity = { dev: status.dev, ino: status.ino, size: status.size };
+    const identity = verifiedFilesystemIdentity(status);
     const required = requiredIdentities?.get(expected.id);
     if (
       required !== undefined &&
-      (required.dev !== identity.dev ||
-        required.ino !== identity.ino ||
-        required.size !== identity.size)
+      !(requireExactIdentity
+        ? sameVerifiedFilesystemIdentity(required, identity)
+        : sameObjectStorageIdentity(required, identity))
     ) {
       fail("snapshot_mismatch", "A downloaded snapshot object was replaced during reconstruction");
     }
@@ -779,7 +836,7 @@ async function withRawParentDirectory<T>(
 
 async function reconstructTree(
   capability: SnapshotCapability,
-  objectIdentities: ReadonlyMap<string, VerifiedObjectIdentity>,
+  objectIdentities: ReadonlyMap<string, VerifiedFilesystemIdentity>,
   signal: AbortSignal,
 ): Promise<void> {
   await requireEmptyDirectory(capability.treeHandle);
@@ -827,9 +884,17 @@ function compareNameSets(actual: readonly Buffer[], expected: readonly ExpectedE
 
 async function verifyTree(
   capability: SnapshotCapability,
-  objectIdentities: ReadonlyMap<string, VerifiedObjectIdentity>,
+  objectIdentities: ReadonlyMap<string, VerifiedFilesystemIdentity>,
   signal: AbortSignal,
-): Promise<void> {
+  requiredDirectories?: ReadonlyMap<string, VerifiedFilesystemIdentity>,
+): Promise<ReadonlyMap<string, VerifiedFilesystemIdentity>> {
+  const expectedDirectoryCount =
+    capability.expected.entries.filter((entry) => entry.type === "directory").length + 1;
+  if (requiredDirectories !== undefined && requiredDirectories.size !== expectedDirectoryCount) {
+    fail("snapshot_mismatch", "The materialized snapshot directory set is incomplete");
+  }
+  const directoryIdentities = new Map<string, VerifiedFilesystemIdentity>();
+
   async function verifyDirectory(
     handle: FileHandle,
     identity: BigIntStats,
@@ -837,6 +902,15 @@ async function verifyTree(
   ): Promise<void> {
     checkCancelled(signal);
     const before = await handle.stat({ bigint: true });
+    const beforeIdentity = verifiedFilesystemIdentity(before);
+    const requiredIdentity = requiredDirectories?.get(key);
+    if (
+      requiredDirectories !== undefined &&
+      (requiredIdentity === undefined ||
+        !sameVerifiedFilesystemIdentity(requiredIdentity, beforeIdentity))
+    ) {
+      fail("snapshot_mismatch", "A materialized snapshot directory changed after reconstruction");
+    }
     const names = await listRawNames(handle);
     const expectedChildren = [...(capability.expected.children.get(key)?.values() ?? [])];
     if (!compareNameSets(names, expectedChildren)) {
@@ -875,12 +949,61 @@ async function verifyTree(
       }
     }
     const after = await handle.stat({ bigint: true });
-    if (!sameDirectorySnapshot(before, after) || !sameDirectoryObject(identity, after)) {
+    const afterIdentity = verifiedFilesystemIdentity(after);
+    if (
+      !sameVerifiedFilesystemIdentity(beforeIdentity, afterIdentity) ||
+      !sameDirectoryObject(identity, after)
+    ) {
       fail("snapshot_mismatch", "The reconstructed snapshot directory changed while verified");
     }
+    directoryIdentities.set(key, afterIdentity);
   }
 
   await verifyDirectory(capability.treeHandle, capability.treeIdentity, "");
+  if (directoryIdentities.size !== expectedDirectoryCount) {
+    fail("snapshot_mismatch", "The reconstructed snapshot directory set is incomplete");
+  }
+  return directoryIdentities;
+}
+
+async function verifyMaterializedDirectoryIdentities(
+  capability: SnapshotCapability,
+  requiredDirectories: ReadonlyMap<string, VerifiedFilesystemIdentity>,
+  signal: AbortSignal,
+): Promise<void> {
+  const expectedDirectoryCount =
+    capability.expected.entries.filter((entry) => entry.type === "directory").length + 1;
+  if (requiredDirectories.size !== expectedDirectoryCount) {
+    fail("snapshot_mismatch", "The materialized snapshot directory set is incomplete");
+  }
+  let verifiedDirectories = 0;
+
+  async function verifyDirectory(handle: FileHandle, key: string): Promise<void> {
+    checkCancelled(signal);
+    const identity = verifiedFilesystemIdentity(await handle.stat({ bigint: true }));
+    const required = requiredDirectories.get(key);
+    if (required === undefined || !sameVerifiedFilesystemIdentity(required, identity)) {
+      fail("snapshot_mismatch", "A materialized snapshot directory changed after reconstruction");
+    }
+    verifiedDirectories += 1;
+    const expectedChildren = [...(capability.expected.children.get(key)?.values() ?? [])];
+    for (const child of expectedChildren) {
+      if (child.type !== "directory") {
+        continue;
+      }
+      const opened = await openDirectPrivateDirectory(handle, child.name);
+      try {
+        await verifyDirectory(opened.handle, child.key);
+      } finally {
+        await opened.handle.close();
+      }
+    }
+  }
+
+  await verifyDirectory(capability.treeHandle, "");
+  if (verifiedDirectories !== expectedDirectoryCount) {
+    fail("snapshot_mismatch", "The materialized snapshot directory set is incomplete");
+  }
 }
 
 async function collectKnownTreeEntries(
@@ -1109,13 +1232,48 @@ export async function materializeLocalSshSnapshot(
   }
   checkCancelled(signal);
   await assertCapabilityLocations(capability);
-  const identities = await verifyObjectSet(capability, signal, true);
-  await reconstructTree(capability, identities, signal);
-  await verifyTree(capability, identities, signal);
-  await verifyObjectSet(capability, signal, false, identities);
+  const downloadedIdentities = await verifyObjectSet(capability, signal, true);
+  await reconstructTree(capability, downloadedIdentities, signal);
+  capability.materializedDirectories = await verifyTree(capability, downloadedIdentities, signal);
+  capability.materializedObjects = await verifyObjectSet(
+    capability,
+    signal,
+    false,
+    downloadedIdentities,
+  );
   await assertCapabilityLocations(capability);
+  await verifyMaterializedDirectoryIdentities(
+    capability,
+    capability.materializedDirectories,
+    signal,
+  );
   capability.phase = "materialized";
   return capability.mapping;
+}
+
+export async function verifyMaterializedLocalSshSnapshot(
+  handle: LocalSshSnapshotHandle,
+  receivedState: SshTransportState,
+  signal: AbortSignal,
+): Promise<void> {
+  const state = requireMaterializedState(receivedState);
+  const capability = requireCapability(handle, state);
+  if (capability.phase !== "materialized") {
+    fail("state_invalid", "The local SSH snapshot has not been materialized");
+  }
+  const materializedObjects = capability.materializedObjects;
+  const materializedDirectories = capability.materializedDirectories;
+  if (materializedObjects === undefined || materializedDirectories === undefined) {
+    fail("state_invalid", "The local SSH snapshot has no materialized identities");
+  }
+  checkCancelled(signal);
+  await assertCapabilityLocations(capability);
+  const identities = await verifyObjectSet(capability, signal, false, materializedObjects, true);
+  await verifyTree(capability, identities, signal, materializedDirectories);
+  await verifyObjectSet(capability, signal, false, identities, true);
+  await assertCapabilityLocations(capability);
+  await verifyMaterializedDirectoryIdentities(capability, materializedDirectories, signal);
+  checkCancelled(signal);
 }
 
 export async function cleanupLocalSshSnapshot(

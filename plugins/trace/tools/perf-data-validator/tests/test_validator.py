@@ -215,6 +215,37 @@ def test_real_fixture_matches_canonical_golden(
     assert report_path.read_bytes() == golden
 
 
+def test_real_fixture_report_is_independent_of_absolute_root(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capfd: pytest.CaptureFixture[str],
+) -> None:
+    """Keep report bytes independent of the absolute input root."""
+    copied_fixture = tmp_path / "copied-fixture" / "perf-data"
+    shutil.copytree(_REAL_FIXTURE, copied_fixture)
+
+    _, original_report_path, _ = _run_validator(
+        _REAL_FIXTURE,
+        monkeypatch,
+        tmp_path / "original-output",
+        capfd,
+    )
+    _, copied_report_path, _ = _run_validator(
+        copied_fixture,
+        monkeypatch,
+        tmp_path / "copied-output",
+        capfd,
+    )
+
+    stored_golden = _GOLDEN.read_bytes()
+    assert stored_golden.endswith(b"\n")
+    golden = stored_golden.removesuffix(b"\n")
+    original_report = original_report_path.read_bytes()
+    copied_report = copied_report_path.read_bytes()
+    assert original_report_path != copied_report_path
+    assert original_report == copied_report == golden
+
+
 def test_multiple_metadata_is_local_to_metadata(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

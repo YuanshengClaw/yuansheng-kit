@@ -66,7 +66,7 @@
       "source": {
         "kind": "file",
         "path": "plugins/trace/opencode/src/local-ssh-snapshot.ts",
-        "sha256": "64f5db01faa31ac6d252387f2f15367b15babce23d189647a28203ff551d2398"
+        "sha256": "a29de8b2c1787f290af8088444c85b9d02b75e212fc67dd95fab8dd0c69ed39d"
       },
       "requires": ["ssh-transport"]
     },
@@ -88,7 +88,7 @@
       "source": {
         "kind": "file",
         "path": "plugins/trace/opencode/src/index.ts",
-        "sha256": "b941ffc0035bf236bf6c2bd1d04b3a09ac69b3331670203451057c99809132f2"
+        "sha256": "0251ff7eeb51113a14d730bfffb4f13dfb42e5bdb66d7604ab1508685eb440d4"
       },
       "requires": [
         "hardware-profile",
@@ -104,7 +104,7 @@
       "source": {
         "kind": "file",
         "path": "plugins/trace/opencode/src/platform-handler.ts",
-        "sha256": "6e718f1de5fc67286901699352c3c21daa9730ef830fdbff0ce4b1594307e189"
+        "sha256": "7f3d251d34c7a65058f0ca834920fb385278e9755928e6987b6a30141d52721f"
       },
       "requires": [
         "opencode-package",
@@ -123,7 +123,7 @@
       "source": {
         "kind": "tree",
         "path": "plugins/trace/tools/perf-data-validator",
-        "sha256": "56f98277e4fa4e483ca74d05d7aa468851a48f7378cf6970545139b3f1c1494f"
+        "sha256": "033d44cb5bff26d5a0279fdeef0475a092f495734599c186442b48032b0770b7"
       },
       "requires": []
     },
@@ -237,7 +237,7 @@
       "source": {
         "kind": "file",
         "path": "plugins/trace/agents/trace.md",
-        "sha256": "9feceb6d56d5917418c7d486215ab7765863511068d7bbc668881207d8eee4dc"
+        "sha256": "0d9306e3c8f24b369ee75bc6238660cd19115771c09db4a47b7796df427bcbc8"
       },
       "requires": ["write-root-cause-blueprint-skill"]
     },
@@ -248,7 +248,7 @@
       "source": {
         "kind": "file",
         "path": "plugins/trace/commands/trace.md",
-        "sha256": "17cccd7b7984f1b099f970344eefb212f6c26b7b57da8d4cd6f76d59e6c27e1f"
+        "sha256": "ae53a052ac31c952c6dbdffb91289805a7a441da6974f3fcb3c6be379b953e5f"
       },
       "requires": ["trace-agent", "trace-workflow"]
     },
@@ -330,6 +330,7 @@
           "webfetch": "deny",
           "websearch": "deny",
           "write": "deny",
+          "ys_trace_cleanup_run": "allow",
           "ys_trace_inventory_remote_input": "allow",
           "ys_trace_provide_validation_report": "allow",
           "ys_trace_ssh_transport": "ask",
@@ -338,7 +339,8 @@
           "ys_trace_transfer_remote_input": "allow"
         },
         "runtime": {
-          "bundle_sha256": "47d5486c3863a2818a012d0875bd6f6d5b6630f196ae5b5f621935e503b515eb",
+          "bundle_sha256": "8f094fe69e6d0c88082ec0ada6ea720e97add2b71b1ee1cb337bd1614f465f01",
+          "cleanup_tool": "ys_trace_cleanup_run",
           "destination": ".opencode/plugins/ys-trace.js",
           "entrypoint_resource": "opencode-runtime-entry",
           "external": ["node:crypto", "node:fs", "node:fs/promises", "node:path", "node:url"],

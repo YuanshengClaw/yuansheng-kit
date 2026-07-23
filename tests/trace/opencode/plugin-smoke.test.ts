@@ -11,6 +11,7 @@ import {
 } from "./capabilities/harness";
 
 const WORKSPACE_ROOT = join(import.meta.dir, "../../..");
+const CLEANUP_TOOL_ID = "ys_trace_cleanup_run";
 const INVENTORY_TOOL_ID = "ys_trace_inventory_remote_input";
 const REPORT_TOOL_ID = "ys_trace_provide_validation_report";
 const START_TOOL_ID = "ys_trace_start";
@@ -33,6 +34,20 @@ interface RuntimeTool {
 
 interface InstalledPluginHooks {
   readonly dispose?: () => Promise<void>;
+  readonly event?: (input: {
+    readonly event:
+      | Readonly<{
+          properties: Readonly<{ info: Readonly<{ id: string }> }>;
+          type: "session.deleted";
+        }>
+      | Readonly<{
+          properties: Readonly<{
+            error: Readonly<{ data: Readonly<{ message: string }>; name: "MessageAbortedError" }>;
+            sessionID: string;
+          }>;
+          type: "session.error";
+        }>;
+  }) => Promise<void>;
   readonly tool?: Readonly<Record<string, RuntimeTool>>;
 }
 
@@ -208,6 +223,7 @@ test("the formal Yuansheng Trace artifact loads and starts its pre-validator wor
         throw new Error("OpenCode tool IDs endpoint did not return an array");
       }
       expect(toolIds).toContain(INVENTORY_TOOL_ID);
+      expect(toolIds).toContain(CLEANUP_TOOL_ID);
       expect(toolIds).toContain(START_TOOL_ID);
       expect(toolIds).toContain(REPORT_TOOL_ID);
       expect(toolIds).toContain(TRANSFER_TOOL_ID);
@@ -221,11 +237,13 @@ test("the formal Yuansheng Trace artifact loads and starts its pre-validator wor
     const hooks = await pluginModule.YuanshengTracePlugin({} as never);
     try {
       const startTool = hooks.tool?.[START_TOOL_ID];
+      const cleanupTool = hooks.tool?.[CLEANUP_TOOL_ID];
       const inventoryTool = hooks.tool?.[INVENTORY_TOOL_ID];
       const reportTool = hooks.tool?.[REPORT_TOOL_ID];
       const transferTool = hooks.tool?.[TRANSFER_TOOL_ID];
       if (
         startTool === undefined ||
+        cleanupTool === undefined ||
         inventoryTool === undefined ||
         reportTool === undefined ||
         transferTool === undefined
@@ -233,6 +251,8 @@ test("the formal Yuansheng Trace artifact loads and starts its pre-validator wor
         throw new Error("Installed Yuansheng Trace tools are unavailable");
       }
       const session = runtimeContext(environment, "validation-session");
+      const abortSession = runtimeContext(environment, "abort-session");
+      const deletedSession = runtimeContext(environment, "deleted-session");
       const otherSession = runtimeContext(environment, "other-session");
       const perfDataRoot = join(environment.root, "perf-data");
       const startOutput = toolOutput(
@@ -256,14 +276,91 @@ test("the formal Yuansheng Trace artifact loads and starts its pre-validator wor
           otherSession,
         ),
       ).rejects.toThrow("unknown in this OpenCode session");
+
+      const cleanedStart = toolOutput(
+        "explicit cleanup start",
+        await startTool.execute({ perf_data_root: perfDataRoot, software: "openblas" }, session),
+      );
+      const cleanedRunId = requireString("explicit cleanup run id", cleanedStart.run_id);
+      const explicitCleanups = await Promise.all([
+        cleanupTool.execute({ run_id: cleanedRunId }, session),
+        cleanupTool.execute({ run_id: cleanedRunId }, session),
+      ]);
+      for (const cleanup of explicitCleanups) {
+        expect(toolOutput("explicit cleanup", cleanup)).toMatchObject({
+          cleanup: {
+            local_staging_removed: null,
+            remote_temp_removed: null,
+            report_removed: true,
+            residual_paths: [],
+          },
+          run_id: cleanedRunId,
+          status: "cleaned",
+        });
+      }
+      await expect(cleanupTool.execute({ run_id: cleanedRunId }, session)).rejects.toThrow(
+        "unknown in this OpenCode session",
+      );
+
+      const abortedStart = toolOutput(
+        "aborted session start",
+        await startTool.execute(
+          { perf_data_root: perfDataRoot, software: "openblas" },
+          abortSession,
+        ),
+      );
+      const abortedRunId = requireString("aborted session run id", abortedStart.run_id);
+      const abortedReceipt = await writeValidationReport(abortedStart, reportBytes);
+      if (hooks.event === undefined) {
+        throw new Error("Installed Yuansheng Trace event hook is unavailable");
+      }
+      await hooks.event({
+        event: {
+          properties: { info: { id: deletedSession.sessionID } },
+          type: "session.deleted",
+        },
+      });
+      await expect(
+        startTool.execute({ perf_data_root: perfDataRoot, software: "openblas" }, deletedSession),
+      ).rejects.toThrow("session was deleted");
+      await hooks.event({
+        event: {
+          properties: {
+            error: {
+              data: { message: "The user aborted the session" },
+              name: "MessageAbortedError",
+            },
+            sessionID: abortSession.sessionID,
+          },
+          type: "session.error",
+        },
+      });
+      await expect(cleanupTool.execute({ run_id: abortedRunId }, abortSession)).rejects.toThrow(
+        "unknown in this OpenCode session",
+      );
+      expect(await pathExists(abortedReceipt.path)).toBeFalse();
+      expect(await pathExists(join(abortedReceipt.path, ".."))).toBeFalse();
+
+      const concurrentStart = toolOutput(
+        "concurrent cleanup start",
+        await startTool.execute({ perf_data_root: perfDataRoot, software: "openblas" }, session),
+      );
+      const concurrentRunId = requireString("concurrent cleanup run id", concurrentStart.run_id);
+      const concurrentReceipt = await writeValidationReport(concurrentStart, reportBytes);
       const receipt = await writeValidationReport(startOutput, reportBytes);
-      const handoff = toolOutput(
-        "validation report handoff",
-        await reportTool.execute(
+      const [handoffValue, concurrentCleanupValue] = await Promise.all([
+        reportTool.execute(
           { report_path: receipt.path, report_sha256: receipt.sha256, run_id: runId },
           session,
         ),
-      );
+        cleanupTool.execute({ run_id: concurrentRunId }, session),
+      ]);
+      const handoff = toolOutput("validation report handoff", handoffValue);
+      expect(toolOutput("concurrent report cleanup", concurrentCleanupValue)).toMatchObject({
+        cleanup: { report_removed: true, residual_paths: [] },
+        run_id: concurrentRunId,
+        status: "cleaned",
+      });
       expect(handoff).toMatchObject({
         output: { type: "request_profile_selection" },
         report_sha256: receipt.sha256,
@@ -271,6 +368,8 @@ test("the formal Yuansheng Trace artifact loads and starts its pre-validator wor
       });
       expect(await pathExists(receipt.path)).toBeFalse();
       expect(await pathExists(join(receipt.path, ".."))).toBeFalse();
+      expect(await pathExists(concurrentReceipt.path)).toBeFalse();
+      expect(await pathExists(join(concurrentReceipt.path, ".."))).toBeFalse();
       await expect(
         reportTool.execute(
           { report_path: receipt.path, report_sha256: receipt.sha256, run_id: runId },
@@ -349,6 +448,23 @@ test("the formal Yuansheng Trace artifact loads and starts its pre-validator wor
         permission: "ys_trace_ssh_transport",
         patterns: [remoteStart.plan_sha256],
       });
+      const remoteRunId = requireString("remote plan run id", remoteStart.run_id);
+      const remoteCleanups = await Promise.all([
+        cleanupTool.execute({ run_id: remoteRunId }, sshSession),
+        cleanupTool.execute({ run_id: remoteRunId }, sshSession),
+      ]);
+      for (const cleanup of remoteCleanups) {
+        expect(toolOutput("remote plan cleanup", cleanup)).toMatchObject({
+          cleanup: {
+            local_staging_removed: true,
+            remote_temp_removed: true,
+            report_removed: null,
+            residual_paths: [],
+          },
+          run_id: remoteRunId,
+          status: "cleaned",
+        });
+      }
     } finally {
       await hooks.dispose?.();
       restoreRuntimeEnvironment();

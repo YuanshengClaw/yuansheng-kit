@@ -27,6 +27,8 @@ inventory and stops for the user's separate, explicit transfer confirmation.
 After that confirmation, call `ys_trace_transfer_remote_input` with the
 unchanged `run_id`, `plan_sha256`, and `inventory_sha256`. The runtime alone
 performs the fixed remote stage, SFTP download, post-inventory verification,
-local raw-path reconstruction, and remote cleanup. It returns the verified
-local-tree root for the next product step's validation handoff. Never run SSH or
-SFTP through Bash, and do not classify input semantics before validation.
+local raw-path reconstruction, and remote cleanup. It returns the validation
+handoff for the verified local tree with the same `run_id`; do not call
+`ys_trace_start` again. Never run SSH or SFTP through Bash, and do not classify
+input semantics before validation. If the user declines that transfer, terminate
+the bound run through `ys_trace_cleanup_run`.

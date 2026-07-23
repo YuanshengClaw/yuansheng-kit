@@ -1,11 +1,13 @@
 import { expect, test } from "bun:test";
 import { randomBytes } from "node:crypto";
 import {
+  chmod,
   copyFile,
   lstat,
   mkdir,
   mkdtemp,
   readFile,
+  rename,
   rm,
   symlink,
   writeFile,
@@ -17,6 +19,7 @@ import {
   createLocalSshSnapshot,
   materializeLocalSshSnapshot,
   validatedLocalSshObjectsCwd,
+  verifyMaterializedLocalSshSnapshot,
 } from "../../../plugins/trace/opencode/src/local-ssh-snapshot";
 import {
   createSshTransportPlan,
@@ -291,6 +294,50 @@ test("fixed Linux protocol preserves raw paths and binds inventory, stage, objec
       type: "complete_staging",
     });
     expect(state.phase).toBe("staged");
+    await expect(
+      verifyMaterializedLocalSshSnapshot(localSnapshot, state, new AbortController().signal),
+    ).resolves.toBeUndefined();
+
+    const materializedRawDirectory = join(mapping.mapping.local_tree_root, "raw");
+    const displacedRawDirectory = join(mapping.mapping.local_tree_root, "raw-displaced");
+    await rename(materializedRawDirectory, displacedRawDirectory);
+    try {
+      await mkdir(materializedRawDirectory);
+      await writeFile(join(materializedRawDirectory, "replacement"), "malicious-content");
+    } finally {
+      await rm(materializedRawDirectory, { force: true, recursive: true });
+      await rename(displacedRawDirectory, materializedRawDirectory);
+    }
+    await expect(
+      verifyMaterializedLocalSshSnapshot(localSnapshot, state, new AbortController().signal),
+    ).rejects.toMatchObject({
+      code: "snapshot_mismatch",
+      message: "A materialized snapshot directory changed after reconstruction",
+    });
+
+    const materializedFile = join(mapping.mapping.local_tree_root, "normal file");
+    const effectiveUserId = process.geteuid?.() ?? process.getuid?.();
+    if (effectiveUserId === undefined) {
+      throw new Error("Expected a POSIX user ID for the local snapshot fixture");
+    }
+    expect((await lstat(materializedFile)).uid).toBe(effectiveUserId);
+    await chmod(materializedFile, 0o600);
+    await writeFile(materializedFile, "tampered-value");
+    await expect(
+      verifyMaterializedLocalSshSnapshot(localSnapshot, state, new AbortController().signal),
+    ).rejects.toMatchObject({
+      code: "snapshot_mismatch",
+      message: "A downloaded snapshot object is not privately bound",
+    });
+    await writeFile(materializedFile, "normal-content");
+    await chmod(materializedFile, 0o400);
+    await expect(
+      verifyMaterializedLocalSshSnapshot(localSnapshot, state, new AbortController().signal),
+    ).rejects.toMatchObject({
+      code: "snapshot_mismatch",
+      message: "A downloaded snapshot object was replaced during reconstruction",
+    });
+
     const localCleanup = await cleanupLocalSshSnapshot(localSnapshot);
     expect(localCleanup).toMatchObject({ local_staging_removed: true, residual_paths: [] });
     await expect(lstat(stagedTemp)).rejects.toMatchObject({ code: "ENOENT" });

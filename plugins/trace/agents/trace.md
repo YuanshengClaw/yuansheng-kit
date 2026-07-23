@@ -13,8 +13,10 @@ selected hotspot function.
   alias, rewrite the remote root, or choose transport limits for the user.
 - Treat the versioned validation report as the authority for eligible test
   cases, ranked functions, and evidence files. Do not classify the input tree.
-- Use only the validator directory, dependency digest, run identifier, and
-  report location returned by `ys_trace_start`. Never search for another copy of
+- Use only the validator directory, dependency digest, run identifier, perf-data
+  root, and report location returned by the current validation handoff. For a
+  local input this is returned by `ys_trace_start`; for an SSH input it is
+  returned by `ys_trace_transfer_remote_input`. Never search for another copy of
   the validator or reuse state from another run.
 - Analyze only the test cases selected by the user and only one function at a
   time. Never merge, skip, or reorder validated functions.
@@ -37,8 +39,8 @@ selected hotspot function.
 
 ## Validation handoff
 
-After `ys_trace_start` returns, select exactly one handoff from the returned
-location.
+After `ys_trace_start` returns, follow the local validation handoff unless the
+result contains an SSH transport location.
 
 For an SSH location:
 
@@ -52,14 +54,19 @@ For an SSH location:
    `path_base64` value.
 4. Stop and request explicit confirmation of that exact inventory before any
    transfer. Do not treat approval of the plan or inventory command as transfer
-   confirmation.
+   confirmation. If the user declines the transfer, call `ys_trace_cleanup_run`
+   with the unchanged `run_id`.
 5. Only after the user confirms that exact inventory, call
    `ys_trace_transfer_remote_input` with the unchanged `run_id`, `plan_sha256`,
    and `inventory_sha256` returned by the workflow.
 6. Let the runtime perform the fixed remote stage, SFTP download, post-inventory
    verification, local raw-path reconstruction, and remote cleanup. Do not
-   reproduce or alter these operations. The result is a verified local tree; use
-   its returned local root for the validation handoff in the next product step.
+   reproduce or alter these operations. The result is the validation handoff for
+   the verified local tree and retains the original `run_id`. Do not call
+   `ys_trace_start` again.
+7. Continue with the common local validation procedure below, using only the
+   exact `perf_data_root`, validator fields, validation report paths, and
+   `run_id` returned by `ys_trace_transfer_remote_input`.
 
 Do not classify test cases, perf data, annotate data, or other input semantics
 before the validator has accepted the verified local tree.
@@ -69,8 +76,9 @@ the validator, OpenCode, an LLM, or project source on the remote host. Use only
 the runtime's fixed OpenSSH operations, the user's system SSH configuration, and
 the user's existing SSH agent. Do not manage keys or credentials.
 
-For a local location, perform only the following validation handoff. Quote every
-returned path as one shell argument and do not change any argument:
+For a local location, or after an SSH transfer has returned its validation
+handoff, perform only the following procedure. Quote every returned path as one
+shell argument and do not change any argument:
 
 1. Ask before running the prerequisite probe with the host `python3.14`:
 
@@ -81,7 +89,8 @@ returned path as one shell argument and do not change any argument:
    Continue only when the probe returns `compatible: true`, the same
    requirements digest, and non-null `environment.path` and
    `environment.python`. Treat those two fields as `environment_directory` and
-   `environment_python` below. Otherwise report the probe issues and stop.
+   `environment_python` below. Otherwise apply the terminal cleanup rule below,
+   report the probe issues, and stop.
 
 2. If the probe reports that its content-addressed environment is not ready,
    explain the environment path and dependency digest, disclose that dependency
@@ -108,8 +117,17 @@ returned path as one shell argument and do not change any argument:
    `ys_trace_provide_validation_report`. Do not read, edit, move, or summarize
    the report yourself.
 
-Do not run any other shell command. If a probe, setup, validation, or report
-handoff fails, report the bounded diagnostic and stop this run.
+Do not run any other shell command. If a probe, setup, or validation operation
+fails after a validation handoff, call `ys_trace_cleanup_run` with the unchanged
+`run_id`, report both bounded results, and stop this run. A failed
+`ys_trace_provide_validation_report` call normally performs the same cleanup and
+deletes the run; do not retry that run. If its bounded diagnostic instead names
+a cleanup residual, call `ys_trace_cleanup_run` with the unchanged `run_id` to
+retry only the bound cleanup, then report both diagnostics.
+
+After all selected work is complete, or when the user stops the whole run, call
+`ys_trace_cleanup_run` with the unchanged `run_id`. Treat cleanup residuals as a
+bounded terminal error; never search for or remove residual paths yourself.
 
 Use the `write-root-cause-blueprint` skill when the workflow requests a
 Blueprint candidate or semantic review.

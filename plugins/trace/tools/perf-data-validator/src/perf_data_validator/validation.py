@@ -927,6 +927,8 @@ def _ensure_private_directory(path: Path) -> None:
     except FileNotFoundError:
         try:
             path.mkdir(mode=0o700)
+        except FileExistsError:
+            pass
         except OSError as error:
             raise ValidationRuntimeError(
                 "The report directory could not be created."

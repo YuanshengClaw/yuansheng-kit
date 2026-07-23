@@ -30,7 +30,10 @@ import {
   type SshTransportState,
   transitionSshTransport,
 } from "../../transport/ssh-transport";
-import { parseSg2044HardwareProfile } from "../../workflows/hardware-profile";
+import {
+  type ConfirmedHardwareProfile,
+  parseSg2044HardwareProfile,
+} from "../../workflows/hardware-profile";
 import { parsePerfDataValidationReportV1 } from "../../workflows/perf-data-validation-report";
 import {
   startTraceWorkflow,
@@ -43,6 +46,7 @@ import {
   LocalSshSnapshotError,
   type LocalSshSnapshotHandle,
   materializeLocalSshSnapshot,
+  verifyMaterializedLocalSshSnapshot,
 } from "./local-ssh-snapshot";
 import {
   discoverOpenSshExecutables,
@@ -103,26 +107,41 @@ interface InstalledValidator {
   readonly toolTreeSha256: string;
 }
 
+interface ValidationDependencies {
+  readonly profile: ConfirmedHardwareProfile;
+  readonly validator: InstalledValidator;
+}
+
+type RunSource = Readonly<{ kind: "local" }> | Readonly<{ kind: "ssh"; run: PendingRemoteRun }>;
+
 interface RunRecord {
+  cleanupOperation?: Promise<Readonly<Record<string, unknown>>>;
   readonly evidenceRoot: string;
+  readonly lifecycleAbort: AbortController;
+  reportOperation?: RemoteOperation;
   readonly reportDirectory: string;
   readonly reportParent: string;
   readonly reportPath: string;
-  reportInFlight: boolean;
+  readonly source: RunSource;
+  status: "active" | "cleanup_pending";
   transition: TraceTransition;
 }
 
 interface PendingRemoteRun {
   readonly artifactRoot: string;
+  cleanupOperation?: Promise<Readonly<Record<string, unknown>>>;
   readonly cleanupSafety: RemoteCleanupSafety;
   inventoryInFlight: boolean;
   readonly lifecycleAbort: AbortController;
   readonly localResidualPaths: Set<string>;
   localSnapshot?: LocalSshSnapshotHandle;
   operation?: RemoteOperation;
+  readonly profile: ConfirmedHardwareProfile;
   readonly software: string;
+  status: "active" | "cleanup_pending";
   transport: SshTransportState;
   transferInFlight: boolean;
+  readonly validator: InstalledValidator;
 }
 
 interface RemoteCleanupSafety {
@@ -188,6 +207,28 @@ function errorCode(error: unknown): string | undefined {
 function checkCancelled(signal: AbortSignal | undefined): void {
   if (signal?.aborted === true) {
     fail("operation_cancelled", "Yuansheng Trace operation was cancelled");
+  }
+}
+
+async function awaitAbortableAuthorization(
+  authorize: () => Promise<void>,
+  signal: AbortSignal,
+): Promise<void> {
+  checkCancelled(signal);
+  let rejectCancellation = (): void => undefined;
+  const cancellation = new Promise<never>((_, reject) => {
+    rejectCancellation = () => {
+      reject(
+        new TraceRuntimeError("operation_cancelled", "Yuansheng Trace operation was cancelled"),
+      );
+    };
+  });
+  signal.addEventListener("abort", rejectCancellation, { once: true });
+  try {
+    checkCancelled(signal);
+    await Promise.race([authorize(), cancellation]);
+  } finally {
+    signal.removeEventListener("abort", rejectCancellation);
   }
 }
 
@@ -275,6 +316,37 @@ function sameFileIdentity(
     left.mode === right.mode &&
     left.mtimeMs === right.mtimeMs &&
     left.ctimeMs === right.ctimeMs
+  );
+}
+
+function sameDirectoryObject(
+  left: Awaited<ReturnType<FileHandle["stat"]>>,
+  right: Awaited<ReturnType<FileHandle["stat"]>>,
+): boolean {
+  return (
+    left.isDirectory() && right.isDirectory() && left.dev === right.dev && left.ino === right.ino
+  );
+}
+
+function sameDirectorySecurity(
+  left: Awaited<ReturnType<FileHandle["stat"]>>,
+  right: Awaited<ReturnType<FileHandle["stat"]>>,
+): boolean {
+  return (
+    sameDirectoryObject(left, right) &&
+    left.gid === right.gid &&
+    left.mode === right.mode &&
+    left.uid === right.uid
+  );
+}
+
+function secureSharedDirectory(status: Awaited<ReturnType<FileHandle["stat"]>>): boolean {
+  const effectiveUserId = process.geteuid?.();
+  return (
+    effectiveUserId !== undefined &&
+    status.isDirectory() &&
+    BigInt(status.uid) === BigInt(effectiveUserId) &&
+    (BigInt(status.mode) & 0o022n) === 0n
   );
 }
 
@@ -489,6 +561,18 @@ async function inspectInstalledValidator(signal: AbortSignal): Promise<Installed
   }
 }
 
+async function inspectValidationDependencies(signal: AbortSignal): Promise<ValidationDependencies> {
+  const [validator, profileBytes] = await Promise.all([
+    inspectInstalledValidator(signal),
+    readFile(SG2044_PROFILE_URL, { signal }),
+  ]);
+  checkCancelled(signal);
+  return {
+    profile: parseSg2044HardwareProfile(profileBytes),
+    validator,
+  };
+}
+
 function requireProjectRoot(worktree: string, directory: string): string {
   for (const candidate of [worktree, directory]) {
     if (candidate.length === 0 || !isAbsolute(candidate)) {
@@ -503,13 +587,19 @@ function requireProjectRoot(worktree: string, directory: string): string {
 }
 
 function resolveArtifactRoot(projectRoot: string, override: string | undefined): string {
-  if (override === undefined) {
-    return resolve(projectRoot, DEFAULT_ARTIFACT_ROOT);
+  const absolute =
+    override === undefined
+      ? resolve(projectRoot, DEFAULT_ARTIFACT_ROOT)
+      : (() => {
+          if (override.trim().length === 0 || override.includes("\0")) {
+            throw new TypeError("artifact_root must be a non-empty path");
+          }
+          return isAbsolute(override) ? resolve(override) : resolve(projectRoot, override);
+        })();
+  if (parsePath(absolute).root === absolute) {
+    throw new TypeError("artifact_root must not resolve to a filesystem root");
   }
-  if (override.trim().length === 0 || override.includes("\0")) {
-    throw new TypeError("artifact_root must be a non-empty path");
-  }
-  return isAbsolute(override) ? resolve(override) : resolve(projectRoot, override);
+  return absolute;
 }
 
 function resolvePerfDataRoot(projectRoot: string, requested: string): string {
@@ -564,6 +654,57 @@ function reportPaths(runId: string): Readonly<{ directory: string; parent: strin
   return { directory, parent, path: join(directory, REPORT_FILENAME) };
 }
 
+function prepareValidationRun(input: {
+  readonly artifactRoot: string;
+  readonly dependencies: ValidationDependencies;
+  readonly evidenceRoot: string;
+  readonly lifecycleAbort?: AbortController;
+  readonly runId: string;
+  readonly software: string;
+  readonly source: RunSource;
+}): RunRecord {
+  const report = reportPaths(input.runId);
+  return {
+    evidenceRoot: input.evidenceRoot,
+    lifecycleAbort: input.lifecycleAbort ?? new AbortController(),
+    reportDirectory: report.directory,
+    reportParent: report.parent,
+    reportPath: report.path,
+    source: input.source,
+    status: "active",
+    transition: startTraceWorkflow({
+      artifactRoot: input.artifactRoot,
+      perfDataRoot: input.evidenceRoot,
+      profiles: [input.dependencies.profile],
+      software: input.software,
+    }),
+  };
+}
+
+function validationHandoff(
+  artifactRoot: string,
+  runId: string,
+  run: RunRecord,
+  validator: InstalledValidator,
+): Readonly<Record<string, unknown>> {
+  return {
+    artifact_root: artifactRoot,
+    output: run.transition.output,
+    perf_data_root: run.evidenceRoot,
+    run_id: runId,
+    validation_report: {
+      directory: run.reportDirectory,
+      path: run.reportPath,
+    },
+    validator: {
+      directory: validator.directory,
+      requirements_path: validator.requirementsPath,
+      requirements_sha256: validator.requirementsSha256,
+      tool_tree_sha256: validator.toolTreeSha256,
+    },
+  };
+}
+
 function sshStagingRoot(runId: string): string {
   return resolve(reportBaseDirectory(), ...SSH_STAGING_PATH_SEGMENTS, runId);
 }
@@ -588,6 +729,7 @@ async function openBoundDirectory(
   openPath: string,
   expectedPath: string,
   label: string,
+  sharedParent = false,
 ): Promise<
   Readonly<{
     handle: FileHandle;
@@ -606,12 +748,14 @@ async function openBoundDirectory(
   try {
     const opened = await handle.stat({ bigint: true });
     const pathAfter = await lstat(expectedPath, { bigint: true });
+    const identityMatches = sharedParent ? sameDirectorySecurity : sameFileIdentity;
     if (
       !opened.isDirectory() ||
+      (sharedParent && !secureSharedDirectory(opened)) ||
       pathAfter.isSymbolicLink() ||
       !pathAfter.isDirectory() ||
-      !sameFileIdentity(pathBefore, opened) ||
-      !sameFileIdentity(opened, pathAfter) ||
+      !identityMatches(pathBefore, opened) ||
+      !identityMatches(opened, pathAfter) ||
       (await realpath(descriptorPath(handle))) !== expectedPath
     ) {
       fail("report_unavailable", `${label} does not resolve to its bound directory`);
@@ -624,7 +768,12 @@ async function openBoundDirectory(
 }
 
 async function openBoundReportDirectory(run: RunRecord): Promise<BoundReportDirectory> {
-  const parent = await openBoundDirectory(run.reportParent, run.reportParent, "The report parent");
+  const parent = await openBoundDirectory(
+    run.reportParent,
+    run.reportParent,
+    "The report parent",
+    true,
+  );
   try {
     const runEntryPath = join(descriptorPath(parent.handle), basename(run.reportDirectory));
     const directory = await openBoundDirectory(
@@ -648,15 +797,6 @@ async function openBoundReportDirectory(run: RunRecord): Promise<BoundReportDire
   }
 }
 
-function sameDirectoryObject(
-  left: Awaited<ReturnType<FileHandle["stat"]>>,
-  right: Awaited<ReturnType<FileHandle["stat"]>>,
-): boolean {
-  return (
-    left.isDirectory() && right.isDirectory() && left.dev === right.dev && left.ino === right.ino
-  );
-}
-
 async function boundDirectoryLocationsMatch(bound: BoundReportDirectory): Promise<boolean> {
   try {
     const [parentHandle, runHandle, parentPath, runPath, parentActual, runActual] =
@@ -671,10 +811,10 @@ async function boundDirectoryLocationsMatch(bound: BoundReportDirectory): Promis
     return (
       !parentPath.isSymbolicLink() &&
       !runPath.isSymbolicLink() &&
-      sameDirectoryObject(bound.parentIdentity, parentHandle) &&
-      sameDirectoryObject(bound.parentIdentity, parentPath) &&
-      sameDirectoryObject(bound.runIdentity, runHandle) &&
-      sameDirectoryObject(bound.runIdentity, runPath) &&
+      sameDirectorySecurity(bound.parentIdentity, parentHandle) &&
+      sameDirectorySecurity(bound.parentIdentity, parentPath) &&
+      sameDirectorySecurity(bound.runIdentity, runHandle) &&
+      sameDirectorySecurity(bound.runIdentity, runPath) &&
       parentActual === bound.parentPath &&
       runActual === bound.runPath
     );
@@ -692,8 +832,8 @@ async function assertBoundDirectoriesUnchanged(bound: BoundReportDirectory): Pro
   ]);
   if (
     !(await boundDirectoryLocationsMatch(bound)) ||
-    !sameFileIdentity(bound.parentIdentity, parentHandle) ||
-    !sameFileIdentity(bound.parentIdentity, parentPath) ||
+    !sameDirectorySecurity(bound.parentIdentity, parentHandle) ||
+    !sameDirectorySecurity(bound.parentIdentity, parentPath) ||
     !sameFileIdentity(bound.runIdentity, runHandle) ||
     !sameFileIdentity(bound.runIdentity, runPath)
   ) {
@@ -892,6 +1032,46 @@ function cleanupStatus(input: {
   };
 }
 
+async function cleanupRemoteRun(run: PendingRemoteRun): Promise<readonly string[]> {
+  if (run.transport.phase === "cleaned") {
+    return [];
+  }
+  const [inventoryRemoved, local, remoteRemoved] = await Promise.all([
+    cleanupRemoteInventorySnapshot(run),
+    cleanupLocalSnapshot(run),
+    cleanupRemoteSnapshot(run),
+  ]);
+  const cleanup = cleanupStatus({
+    localRemoved: local.removed,
+    localResidualPaths: local.residualPaths,
+    remoteRemoved,
+    remoteResidualPaths: inventoryRemoved ? [] : [run.transport.plan.plan.remote_inventory_temp],
+    run,
+  });
+  try {
+    run.transport = transitionSshTransport(run.transport, {
+      cleanup,
+      ...(cleanup.residual_paths.length === 0
+        ? { type: "clean" as const }
+        : { error_code: "transport_failed" as const, type: "fail" as const }),
+    });
+  } catch {
+    return [...new Set([...cleanup.residual_paths, run.transport.plan.plan.local_staging_root])];
+  }
+  return cleanup.residual_paths;
+}
+
+async function verifyRunEvidenceSnapshot(run: RunRecord, signal: AbortSignal): Promise<void> {
+  if (run.source.kind === "local") {
+    return;
+  }
+  const remoteRun = run.source.run;
+  if (remoteRun.localSnapshot === undefined || remoteRun.transport.phase !== "staged") {
+    fail("remote_transport_failed", "The SSH validation run has no verified local snapshot");
+  }
+  await verifyMaterializedLocalSshSnapshot(remoteRun.localSnapshot, remoteRun.transport, signal);
+}
+
 function rejectedStageFromRuntimeError(
   error: OpenSshRuntimeError,
   state: Extract<SshTransportState, { phase: "transferring" }>,
@@ -961,10 +1141,53 @@ function finishRemoteOperation(run: PendingRemoteRun, operation: RemoteOperation
   operation.resolveDone();
 }
 
+function beginReportOperation(run: RunRecord, callerSignal: AbortSignal): RemoteOperation {
+  if (run.reportOperation !== undefined) {
+    fail("invalid_run", "The trace run is already consuming a validation report");
+  }
+  const controller = new AbortController();
+  const abort = () => controller.abort();
+  const signals = [callerSignal, run.lifecycleAbort.signal];
+  for (const signal of signals) {
+    if (signal.aborted) {
+      abort();
+    } else {
+      signal.addEventListener("abort", abort, { once: true });
+    }
+  }
+  let resolveDone = (): void => undefined;
+  const done = new Promise<void>((resolveOperation) => {
+    resolveDone = resolveOperation;
+  });
+  const operation: RemoteOperation = {
+    controller,
+    detach: () => {
+      for (const signal of signals) {
+        signal.removeEventListener("abort", abort);
+      }
+    },
+    done,
+    phase: "running",
+    resolveDone,
+  };
+  run.reportOperation = operation;
+  return operation;
+}
+
+function finishReportOperation(run: RunRecord, operation: RemoteOperation): void {
+  if (run.reportOperation !== operation) {
+    return;
+  }
+  delete run.reportOperation;
+  operation.detach();
+  operation.resolveDone();
+}
+
 export const YuanshengTracePlugin: Plugin = async () => {
   const sessions = new Map<string, Map<string, RunRecord>>();
   const remoteSessions = new Map<string, Map<string, PendingRemoteRun>>();
   const activeRunIds = new Set<string>();
+  const deletedSessions = new Set<string>();
   let disposing = false;
 
   function createRunId(): string {
@@ -977,7 +1200,13 @@ export const YuanshengTracePlugin: Plugin = async () => {
   }
 
   function registerRun(sessionId: string, runId: string, run: RunRecord): void {
+    if (deletedSessions.has(sessionId)) {
+      fail("invalid_run", "The OpenCode session was deleted before the trace run could start");
+    }
     const sessionRuns = sessions.get(sessionId) ?? new Map<string, RunRecord>();
+    if (sessionRuns.has(runId)) {
+      fail("invalid_run", "The trace run is already registered in this OpenCode session");
+    }
     sessionRuns.set(runId, run);
     sessions.set(sessionId, sessionRuns);
   }
@@ -995,6 +1224,9 @@ export const YuanshengTracePlugin: Plugin = async () => {
   }
 
   function registerRemoteRun(sessionId: string, runId: string, run: PendingRemoteRun): void {
+    if (deletedSessions.has(sessionId)) {
+      fail("invalid_run", "The OpenCode session was deleted before the trace run could start");
+    }
     const sessionRuns = remoteSessions.get(sessionId) ?? new Map<string, PendingRemoteRun>();
     sessionRuns.set(runId, run);
     remoteSessions.set(sessionId, sessionRuns);
@@ -1012,66 +1244,233 @@ export const YuanshengTracePlugin: Plugin = async () => {
     }
   }
 
-  return {
-    async dispose() {
-      disposing = true;
-      const runs = [...sessions.values()].flatMap((sessionRuns) => [...sessionRuns.values()]);
-      const remoteRuns = [...remoteSessions.values()].flatMap((sessionRuns) => [
-        ...sessionRuns.values(),
+  function promoteRemoteRun(
+    sessionId: string,
+    runId: string,
+    remoteRun: PendingRemoteRun,
+    run: RunRecord,
+  ): void {
+    const remoteRuns = remoteSessions.get(sessionId);
+    if (remoteRuns?.get(runId) !== remoteRun) {
+      fail("invalid_run", "The remote trace run cannot be promoted from this OpenCode session");
+    }
+    if (disposing || remoteRun.status !== "active" || remoteRun.lifecycleAbort.signal.aborted) {
+      fail("operation_cancelled", "The remote trace run was cancelled before validation handoff");
+    }
+    registerRun(sessionId, runId, run);
+    remoteRuns.delete(runId);
+    if (remoteRuns.size === 0) {
+      remoteSessions.delete(sessionId);
+    }
+  }
+
+  function cleanupSessionRun(
+    sessionId: string,
+    runId: string,
+  ): Promise<Readonly<Record<string, unknown>>> {
+    const validationRun = sessions.get(sessionId)?.get(runId);
+    const pendingRemoteRun = remoteSessions.get(sessionId)?.get(runId);
+    if (validationRun === undefined && pendingRemoteRun === undefined) {
+      fail("invalid_run", "The trace run is unknown in this OpenCode session");
+    }
+    const remoteRun =
+      validationRun?.source.kind === "ssh" ? validationRun.source.run : pendingRemoteRun;
+    const cleanupOwner = validationRun ?? pendingRemoteRun;
+    if (cleanupOwner === undefined) {
+      fail("invalid_run", "The trace run is unknown in this OpenCode session");
+    }
+    if (cleanupOwner.cleanupOperation !== undefined) {
+      return cleanupOwner.cleanupOperation;
+    }
+
+    if (validationRun !== undefined) {
+      validationRun.status = "cleanup_pending";
+      validationRun.lifecycleAbort.abort();
+    }
+    if (remoteRun !== undefined) {
+      remoteRun.status = "cleanup_pending";
+      remoteRun.lifecycleAbort.abort();
+    }
+
+    const cleanupOperation = (async () => {
+      await Promise.all([
+        ...(validationRun?.reportOperation === undefined
+          ? []
+          : [validationRun.reportOperation.done]),
+        ...(remoteRun?.operation === undefined ? [] : [remoteRun.operation.done]),
       ]);
-      for (const run of remoteRuns) {
-        run.lifecycleAbort.abort();
-      }
-      await Promise.allSettled(
-        remoteRuns.flatMap((run) =>
-          run.operation?.phase === "running" ? [run.operation.done] : [],
-        ),
-      );
-      const residualPaths: string[] = [];
-      const reportCleanup = await Promise.all(
-        runs.map(async (run) => ({ removed: await cleanupReport(run), run })),
-      );
-      for (const result of reportCleanup) {
-        if (!result.removed) {
-          residualPaths.push(result.run.reportDirectory);
-        }
-      }
-      const remoteCleanup = await Promise.all(
-        remoteRuns.map(async (run) => ({
-          inventoryRemoved: await cleanupRemoteInventorySnapshot(run),
-          local: await cleanupLocalSnapshot(run),
-          remoteRemoved: await cleanupRemoteSnapshot(run),
-          run,
-        })),
-      );
-      for (const result of remoteCleanup) {
-        residualPaths.push(...result.local.residualPaths);
-        if (!result.inventoryRemoved) {
-          residualPaths.push(result.run.transport.plan.plan.remote_inventory_temp);
-        }
-        if (!result.remoteRemoved) {
-          residualPaths.push(
-            "cleanup_lease" in result.run.transport &&
-              result.run.transport.cleanup_lease !== undefined
-              ? result.run.transport.cleanup_lease.remote_temp
-              : result.run.transport.plan.plan.remote_temp,
-          );
-        }
-      }
+
+      const reportRemoved = validationRun === undefined ? true : await cleanupReport(validationRun);
+      const remoteResidualPaths = remoteRun === undefined ? [] : await cleanupRemoteRun(remoteRun);
+      const residualPaths = [
+        ...(reportRemoved || validationRun === undefined ? [] : [validationRun.reportDirectory]),
+        ...remoteResidualPaths,
+      ];
       const uniqueResidualPaths = [...new Set(residualPaths)];
       if (uniqueResidualPaths.length > 0) {
         const bounded = uniqueResidualPaths.slice(0, 32);
         const suffix = uniqueResidualPaths.length > bounded.length ? ", ..." : "";
         throw new TraceRuntimeError(
-          "remote_transport_failed",
-          `Yuansheng Trace disposal left cleanup residuals: ${bounded.join(", ")}${suffix}`,
+          reportRemoved ? "remote_transport_failed" : "report_cleanup_failed",
+          `Yuansheng Trace run cleanup left residuals: ${bounded.join(", ")}${suffix}`,
+        );
+      }
+
+      if (validationRun !== undefined) {
+        deleteRun(sessionId, runId, validationRun);
+      } else if (pendingRemoteRun !== undefined) {
+        deleteRemoteRun(sessionId, runId, pendingRemoteRun);
+      }
+      return {
+        cleanup: {
+          local_staging_removed: remoteRun === undefined ? null : true,
+          remote_temp_removed: remoteRun === undefined ? null : true,
+          report_removed: validationRun === undefined ? null : true,
+          residual_paths: [],
+        },
+        run_id: runId,
+        status: "cleaned",
+      };
+    })();
+    cleanupOwner.cleanupOperation = cleanupOperation;
+    const releaseCleanup = (): void => {
+      if (cleanupOwner.cleanupOperation === cleanupOperation) {
+        delete cleanupOwner.cleanupOperation;
+      }
+    };
+    void cleanupOperation.then(releaseCleanup, releaseCleanup);
+    return cleanupOperation;
+  }
+
+  async function cleanupAllSessionRuns(sessionId: string): Promise<void> {
+    const runIds = new Set([
+      ...(sessions.get(sessionId)?.keys() ?? []),
+      ...(remoteSessions.get(sessionId)?.keys() ?? []),
+    ]);
+    const results = await Promise.allSettled(
+      [...runIds].map((runId) => cleanupSessionRun(sessionId, runId)),
+    );
+    const failures = results.filter(
+      (result): result is PromiseRejectedResult => result.status === "rejected",
+    );
+    if (failures.length > 0) {
+      const bounded = failures.slice(0, 8);
+      const details = bounded.map((failure) =>
+        failure.reason instanceof Error
+          ? failure.reason.message.slice(0, 512)
+          : "bounded cleanup failure",
+      );
+      const suffix = failures.length > bounded.length ? "; ..." : "";
+      const reportOnly = failures.every(
+        (failure) =>
+          failure.reason instanceof TraceRuntimeError &&
+          failure.reason.code === "report_cleanup_failed",
+      );
+      throw new TraceRuntimeError(
+        reportOnly ? "report_cleanup_failed" : "remote_transport_failed",
+        `Yuansheng Trace could not clean every run in the terminated session: ${details.join(
+          "; ",
+        )}${suffix}`,
+      );
+    }
+  }
+
+  return {
+    async dispose() {
+      disposing = true;
+      const runs = [...sessions.values()].flatMap((sessionRuns) => [...sessionRuns.values()]);
+      const pendingRemoteRuns = [...remoteSessions.values()].flatMap((sessionRuns) => [
+        ...sessionRuns.values(),
+      ]);
+      const remoteRuns = [
+        ...new Set([
+          ...pendingRemoteRuns,
+          ...runs.flatMap((run) => (run.source.kind === "ssh" ? [run.source.run] : [])),
+        ]),
+      ];
+      for (const run of runs) {
+        run.lifecycleAbort.abort();
+      }
+      for (const run of remoteRuns) {
+        run.lifecycleAbort.abort();
+      }
+      await Promise.allSettled([
+        ...runs.flatMap((run) =>
+          run.cleanupOperation === undefined ? [] : [run.cleanupOperation],
+        ),
+        ...pendingRemoteRuns.flatMap((run) =>
+          run.cleanupOperation === undefined ? [] : [run.cleanupOperation],
+        ),
+        ...runs.flatMap((run) =>
+          run.reportOperation?.phase === "running" ? [run.reportOperation.done] : [],
+        ),
+        ...remoteRuns.flatMap((run) =>
+          run.operation?.phase === "running" ? [run.operation.done] : [],
+        ),
+      ]);
+      const reportResidualPaths: string[] = [];
+      const reportCleanup = await Promise.all(
+        runs.map(async (run) => ({ removed: await cleanupReport(run), run })),
+      );
+      for (const result of reportCleanup) {
+        if (!result.removed) {
+          reportResidualPaths.push(result.run.reportDirectory);
+        }
+      }
+      const remoteResidualPaths: string[] = [];
+      const remoteCleanup = await Promise.all(remoteRuns.map(cleanupRemoteRun));
+      for (const residual of remoteCleanup) {
+        remoteResidualPaths.push(...residual);
+      }
+      const residualPaths = [...reportResidualPaths, ...remoteResidualPaths];
+      const uniqueResidualPaths = [...new Set(residualPaths)];
+      if (uniqueResidualPaths.length > 0) {
+        const bounded = uniqueResidualPaths.slice(0, 32);
+        const suffix = uniqueResidualPaths.length > bounded.length ? ", ..." : "";
+        const reportOnly = remoteResidualPaths.length === 0;
+        throw new TraceRuntimeError(
+          reportOnly ? "report_cleanup_failed" : "remote_transport_failed",
+          `Yuansheng Trace disposal left ${
+            reportOnly ? "report " : ""
+          }cleanup residuals: ${bounded.join(", ")}${suffix}`,
         );
       }
       sessions.clear();
       remoteSessions.clear();
       activeRunIds.clear();
+      deletedSessions.clear();
+    },
+    async event({ event }) {
+      if (disposing) {
+        return;
+      }
+      if (event.type === "session.deleted") {
+        deletedSessions.add(event.properties.info.id);
+        await cleanupAllSessionRuns(event.properties.info.id);
+        return;
+      }
+      if (
+        event.type === "session.error" &&
+        event.properties.sessionID !== undefined &&
+        event.properties.error?.name === "MessageAbortedError"
+      ) {
+        await cleanupAllSessionRuns(event.properties.sessionID);
+      }
     },
     tool: {
+      ys_trace_cleanup_run: tool({
+        description:
+          "Terminate one session-bound Yuansheng Trace run and remove its validation report and SSH staging state.",
+        args: {
+          run_id: tool.schema.string().regex(RUN_ID),
+        },
+        async execute({ run_id }, context) {
+          if (disposing) {
+            fail("invalid_run", "Yuansheng Trace is disposing this plugin instance");
+          }
+          return JSON.stringify(await cleanupSessionRun(context.sessionID, run_id));
+        },
+      }),
       ys_trace_inventory_remote_input: tool({
         description:
           "Run the exactly approved read-only OpenSSH probe and inventory for a pending Yuansheng Trace remote input.",
@@ -1088,6 +1487,7 @@ export const YuanshengTracePlugin: Plugin = async () => {
             fail("invalid_run", "The remote trace run is unknown in this OpenCode session");
           }
           if (
+            run.status !== "active" ||
             run.transport.phase !== "awaiting_inventory" ||
             run.transport.plan.plan_sha256 !== plan_sha256
           ) {
@@ -1119,6 +1519,13 @@ export const YuanshengTracePlugin: Plugin = async () => {
               operation.controller.signal,
             );
             const inventory = parseSshInventory(response.stdout, run.transport.plan);
+            checkCancelled(operation.controller.signal);
+            if (disposing || run.status !== "active") {
+              fail(
+                "operation_cancelled",
+                "The remote trace run was cancelled before inventory handoff",
+              );
+            }
             run.transport = transitionSshTransport(run.transport, {
               inventory,
               type: "bind_inventory",
@@ -1144,6 +1551,7 @@ export const YuanshengTracePlugin: Plugin = async () => {
               run_id,
             });
           } catch (error) {
+            run.status = "cleanup_pending";
             const inventoryCleanupSafe =
               !inventoryAttempted || !(error instanceof OpenSshRuntimeError) || error.cleanupSafe;
             if (!inventoryCleanupSafe) {
@@ -1213,6 +1621,7 @@ export const YuanshengTracePlugin: Plugin = async () => {
             fail("invalid_run", "The remote trace run is unknown in this OpenCode session");
           }
           if (
+            run.status !== "active" ||
             run.transport.phase !== "awaiting_transfer_confirmation" ||
             run.transport.plan.plan_sha256 !== plan_sha256 ||
             run.transport.inventory.inventory_sha256 !== inventory_sha256
@@ -1228,22 +1637,27 @@ export const YuanshengTracePlugin: Plugin = async () => {
             plan_sha256,
             run_id,
           }).sha256;
+          const confirmedInventory = run.transport.inventory.inventory;
           const operation = beginRemoteOperation(run, context.abort, "awaiting_authorization");
           run.transferInFlight = true;
           try {
             try {
-              await context.ask({
-                always: [transferConfirmationSha256],
-                metadata: {
-                  inventory: run.transport.inventory.inventory,
-                  inventory_sha256,
-                  plan_sha256,
-                  run_id,
-                  transfer_confirmation_sha256: transferConfirmationSha256,
-                },
-                patterns: [transferConfirmationSha256],
-                permission: "ys_trace_ssh_transfer",
-              });
+              await awaitAbortableAuthorization(
+                () =>
+                  context.ask({
+                    always: [transferConfirmationSha256],
+                    metadata: {
+                      inventory: confirmedInventory,
+                      inventory_sha256,
+                      plan_sha256,
+                      run_id,
+                      transfer_confirmation_sha256: transferConfirmationSha256,
+                    },
+                    patterns: [transferConfirmationSha256],
+                    permission: "ys_trace_ssh_transfer",
+                  }),
+                operation.controller.signal,
+              );
             } catch (error) {
               throw boundedTransportError(error, "The remote snapshot transfer was not approved");
             }
@@ -1407,32 +1821,65 @@ export const YuanshengTracePlugin: Plugin = async () => {
                 cleanupLease: downloading.cleanup_lease,
                 plan: downloading.plan,
               });
+              checkCancelled(operation.controller.signal);
               run.transport = transitionSshTransport(downloading, {
                 cleanup: remoteCleanup,
                 mapping,
                 type: "complete_staging",
               });
+              await verifyMaterializedLocalSshSnapshot(
+                run.localSnapshot,
+                run.transport,
+                operation.controller.signal,
+              );
+              checkCancelled(operation.controller.signal);
+              if (disposing || run.status !== "active") {
+                fail(
+                  "operation_cancelled",
+                  "The remote trace run was cancelled before validation handoff",
+                );
+              }
+              const validationRun = prepareValidationRun({
+                artifactRoot: run.artifactRoot,
+                dependencies: { profile: run.profile, validator: run.validator },
+                evidenceRoot: mapping.mapping.local_tree_root,
+                lifecycleAbort: run.lifecycleAbort,
+                runId: run_id,
+                software: run.software,
+                source: { kind: "ssh", run },
+              });
+              const handoff = validationHandoff(
+                run.artifactRoot,
+                run_id,
+                validationRun,
+                run.validator,
+              );
+              const output = JSON.stringify({
+                ...handoff,
+                inventory_sha256,
+                local_tree_root: mapping.mapping.local_tree_root,
+                mapping,
+                phase: run.transport.phase,
+                plan_sha256,
+              });
               context.metadata({
                 metadata: {
+                  artifact_root: run.artifactRoot,
                   inventory_sha256,
                   local_tree_root: mapping.mapping.local_tree_root,
                   mapping_sha256: mapping.mapping_sha256,
                   plan_sha256,
+                  report_path: validationRun.reportPath,
+                  requirements_sha256: run.validator.requirementsSha256,
                   run_id,
                   stage_sha256: mapping.mapping.stage_sha256,
                 },
                 title: `Yuansheng Trace SSH snapshot: ${mapping.mapping_sha256}`,
               });
-              return JSON.stringify({
-                inventory_sha256,
-                local_tree_root: mapping.mapping.local_tree_root,
-                mapping,
-                next_action: "local_snapshot_ready_for_validation",
-                phase: run.transport.phase,
-                plan_sha256,
-                run_id,
-              });
+              promoteRemoteRun(context.sessionID, run_id, run, validationRun);
+              return output;
             } catch (error) {
+              run.status = "cleanup_pending";
               let postInventoryRemoved = !remoteInventoryMayExist;
               if (remoteInventoryMayExist && run.cleanupSafety.remoteInventory) {
                 try {
@@ -1511,23 +1958,28 @@ export const YuanshengTracePlugin: Plugin = async () => {
           run_id: tool.schema.string().regex(RUN_ID),
         },
         async execute({ report_path, report_sha256, run_id }, context) {
+          if (disposing) {
+            fail("invalid_run", "Yuansheng Trace is disposing this plugin instance");
+          }
           const sessionRuns = sessions.get(context.sessionID);
           const run = sessionRuns?.get(run_id);
           if (run === undefined) {
             fail("invalid_run", "The trace run is unknown in this OpenCode session");
           }
-          if (run.reportInFlight) {
-            fail("invalid_run", "The trace run is already consuming a validation report");
+          if (
+            run.status !== "active" ||
+            run.transition.state.phase !== "awaiting_validation_report"
+          ) {
+            fail("invalid_run", "The trace run is not waiting for a validation report");
           }
-          run.reportInFlight = true;
+          const operation = beginReportOperation(run, context.abort);
           let bound: BoundReportDirectory | undefined;
           let reportIdentity: Awaited<ReturnType<FileHandle["stat"]>> | undefined;
+          let reportRemoved = false;
 
           try {
-            if (run.transition.state.phase !== "awaiting_validation_report") {
-              fail("invalid_run", "The trace run is not waiting for a validation report");
-            }
             requireExactReportPath(report_path, run.reportPath);
+            await verifyRunEvidenceSnapshot(run, operation.controller.signal);
             try {
               bound = await openBoundReportDirectory(run);
             } catch (error) {
@@ -1537,7 +1989,8 @@ export const YuanshengTracePlugin: Plugin = async () => {
                 "The validation report directories are unavailable",
               );
             }
-            const report = await readValidationReport(bound, context.abort);
+            const report = await readValidationReport(bound, operation.controller.signal);
+            checkCancelled(operation.controller.signal);
             const { bytes } = report;
             reportIdentity = report.identity;
             const rawSha256 = sha256Hex(bytes);
@@ -1570,32 +2023,45 @@ export const YuanshengTracePlugin: Plugin = async () => {
             if (next.state.reportSha256 !== rawSha256) {
               fail("report_rejected", "The validation report digest was not bound to the workflow");
             }
+            await verifyRunEvidenceSnapshot(run, operation.controller.signal);
+            checkCancelled(operation.controller.signal);
             if (!(await cleanupBoundReport(bound, reportIdentity))) {
               fail(
                 "report_cleanup_failed",
                 "Yuansheng Trace could not remove the validation report",
               );
             }
+            reportRemoved = true;
+            checkCancelled(operation.controller.signal);
 
             run.transition = next;
-            run.reportInFlight = false;
             return JSON.stringify({
               output: next.output,
               report_sha256: rawSha256,
               run_id,
             });
           } catch (error) {
-            deleteRun(context.sessionID, run_id, run);
-            const clean =
-              bound === undefined
+            run.status = "cleanup_pending";
+            const reportClean = reportRemoved
+              ? true
+              : bound === undefined
                 ? await cleanupReport(run)
                 : await cleanupBoundReport(bound, reportIdentity);
-            if (!clean) {
+            const remoteResidualPaths =
+              run.source.kind === "ssh" ? await cleanupRemoteRun(run.source.run) : [];
+            const residualPaths = [
+              ...(reportClean ? [] : [run.reportDirectory]),
+              ...remoteResidualPaths,
+            ];
+            if (residualPaths.length > 0) {
               throw new TraceRuntimeError(
-                "report_cleanup_failed",
-                "Yuansheng Trace could not clean up a failed validation report run",
+                reportClean ? "remote_transport_failed" : "report_cleanup_failed",
+                `Yuansheng Trace could not clean up a failed validation report run: ${[
+                  ...new Set(residualPaths),
+                ].join(", ")}`,
               );
             }
+            deleteRun(context.sessionID, run_id, run);
             throw boundedError(
               error,
               "report_rejected",
@@ -1605,6 +2071,7 @@ export const YuanshengTracePlugin: Plugin = async () => {
             if (bound !== undefined) {
               await closeBoundReportDirectory(bound);
             }
+            finishReportOperation(run, operation);
           }
         },
       }),
@@ -1637,6 +2104,7 @@ export const YuanshengTracePlugin: Plugin = async () => {
           const resolvedArtifactRoot = resolveArtifactRoot(projectRoot, artifact_root);
           if (ssh_alias !== undefined) {
             const remoteSoftware = requireRemoteSoftware(software);
+            const dependencies = await inspectValidationDependencies(context.abort);
             const remoteRunId = createRunId();
             let remoteRunRegistered = false;
             try {
@@ -1666,17 +2134,22 @@ export const YuanshengTracePlugin: Plugin = async () => {
                 },
                 title: `Yuansheng Trace SSH plan: ${plan.plan_sha256}`,
               });
-              await context.ask({
-                always: [plan.plan_sha256],
-                metadata: {
-                  artifact_root: resolvedArtifactRoot,
-                  plan: plan.plan,
-                  plan_sha256: plan.plan_sha256,
-                  run_id: remoteRunId,
-                },
-                patterns: [plan.plan_sha256],
-                permission: "ys_trace_ssh_transport",
-              });
+              await awaitAbortableAuthorization(
+                () =>
+                  context.ask({
+                    always: [plan.plan_sha256],
+                    metadata: {
+                      artifact_root: resolvedArtifactRoot,
+                      plan: plan.plan,
+                      plan_sha256: plan.plan_sha256,
+                      run_id: remoteRunId,
+                    },
+                    patterns: [plan.plan_sha256],
+                    permission: "ys_trace_ssh_transport",
+                  }),
+                context.abort,
+              );
+              checkCancelled(context.abort);
               if (disposing) {
                 fail("invalid_run", "Yuansheng Trace disposed before SSH plan approval completed");
               }
@@ -1694,9 +2167,12 @@ export const YuanshengTracePlugin: Plugin = async () => {
                 inventoryInFlight: false,
                 lifecycleAbort: new AbortController(),
                 localResidualPaths: new Set<string>(),
+                profile: dependencies.profile,
                 software: remoteSoftware,
+                status: "active",
                 transport,
                 transferInFlight: false,
+                validator: dependencies.validator,
               };
               registerRemoteRun(context.sessionID, remoteRunId, remoteRun);
               remoteRunRegistered = true;
@@ -1725,35 +2201,25 @@ export const YuanshengTracePlugin: Plugin = async () => {
             fail("invalid_path", "ssh_limits requires an explicit ssh_alias");
           }
           const resolvedPerfDataRoot = resolvePerfDataRoot(projectRoot, perf_data_root);
-          const validator = await inspectInstalledValidator(context.abort);
-          const profile = parseSg2044HardwareProfile(
-            await readFile(SG2044_PROFILE_URL, { signal: context.abort }),
-          );
-          const transition = startTraceWorkflow({
-            artifactRoot: resolvedArtifactRoot,
-            perfDataRoot: resolvedPerfDataRoot,
-            profiles: [profile],
-            software,
-          });
+          const dependencies = await inspectValidationDependencies(context.abort);
           const runId = createRunId();
           let runRegistered = false;
 
           try {
-            const report = reportPaths(runId);
-            const run: RunRecord = {
+            const run = prepareValidationRun({
+              artifactRoot: resolvedArtifactRoot,
+              dependencies,
               evidenceRoot: resolvedPerfDataRoot,
-              reportDirectory: report.directory,
-              reportInFlight: false,
-              reportParent: report.parent,
-              reportPath: report.path,
-              transition,
-            };
+              runId,
+              software,
+              source: { kind: "local" },
+            });
             context.metadata({
               metadata: {
                 artifact_root: resolvedArtifactRoot,
                 perf_data_root: resolvedPerfDataRoot,
-                report_directory: report.directory,
-                report_path: report.path,
+                report_directory: run.reportDirectory,
+                report_path: run.reportPath,
                 run_id: runId,
               },
               title: `Yuansheng Trace: ${resolvedArtifactRoot}`,
@@ -1761,43 +2227,35 @@ export const YuanshengTracePlugin: Plugin = async () => {
             const approvalPaths = [
               resolvedArtifactRoot,
               resolvedPerfDataRoot,
-              report.directory,
-              report.path,
+              run.reportDirectory,
+              run.reportPath,
             ];
-            await context.ask({
-              always: approvalPaths,
-              metadata: {
-                artifact_root: resolvedArtifactRoot,
-                perf_data_root: resolvedPerfDataRoot,
-                report_directory: report.directory,
-                report_path: report.path,
-                run_id: runId,
-              },
-              patterns: approvalPaths,
-              permission: "ys_trace_start",
-            });
+            await awaitAbortableAuthorization(
+              () =>
+                context.ask({
+                  always: approvalPaths,
+                  metadata: {
+                    artifact_root: resolvedArtifactRoot,
+                    perf_data_root: resolvedPerfDataRoot,
+                    report_directory: run.reportDirectory,
+                    report_path: run.reportPath,
+                    run_id: runId,
+                  },
+                  patterns: approvalPaths,
+                  permission: "ys_trace_start",
+                }),
+              context.abort,
+            );
+            checkCancelled(context.abort);
             if (disposing) {
               fail("invalid_run", "Yuansheng Trace disposed before start approval completed");
             }
             registerRun(context.sessionID, runId, run);
             runRegistered = true;
 
-            return JSON.stringify({
-              artifact_root: resolvedArtifactRoot,
-              output: transition.output,
-              perf_data_root: resolvedPerfDataRoot,
-              run_id: runId,
-              validation_report: {
-                directory: report.directory,
-                path: report.path,
-              },
-              validator: {
-                directory: validator.directory,
-                requirements_path: validator.requirementsPath,
-                requirements_sha256: validator.requirementsSha256,
-                tool_tree_sha256: validator.toolTreeSha256,
-              },
-            });
+            return JSON.stringify(
+              validationHandoff(resolvedArtifactRoot, runId, run, dependencies.validator),
+            );
           } finally {
             if (!runRegistered) {
               activeRunIds.delete(runId);

@@ -58,6 +58,7 @@ interface ArtifactRootConfiguration {
 
 interface RuntimeConfiguration {
   readonly bundleSha256: string;
+  readonly cleanupTool: string;
   readonly destination: string;
   readonly entrypointResource: string;
   readonly external: readonly string[];
@@ -302,6 +303,7 @@ function parseRuntime(value: unknown): RuntimeConfiguration {
     runtime,
     [
       "bundle_sha256",
+      "cleanup_tool",
       "destination",
       "entrypoint_resource",
       "external",
@@ -317,11 +319,13 @@ function parseRuntime(value: unknown): RuntimeConfiguration {
   if (!/^[0-9a-f]{64}$/u.test(bundleSha256)) {
     fail("runtime.bundle_sha256 must be a lowercase SHA-256 digest");
   }
+  const cleanupTool = requireString(runtime.cleanup_tool, "runtime.cleanup_tool");
   const inventoryTool = requireString(runtime.inventory_tool, "runtime.inventory_tool");
   const reportTool = requireString(runtime.report_tool, "runtime.report_tool");
   const startTool = requireString(runtime.start_tool, "runtime.start_tool");
   const transferTool = requireString(runtime.transfer_tool, "runtime.transfer_tool");
   if (
+    !SAFE_PERMISSION_NAME.test(cleanupTool) ||
     !SAFE_PERMISSION_NAME.test(inventoryTool) ||
     !SAFE_PERMISSION_NAME.test(reportTool) ||
     !SAFE_PERMISSION_NAME.test(startTool) ||
@@ -329,11 +333,12 @@ function parseRuntime(value: unknown): RuntimeConfiguration {
   ) {
     fail("runtime tools must be normalized OpenCode tool identifiers");
   }
-  if (new Set([inventoryTool, reportTool, startTool, transferTool]).size !== 4) {
+  if (new Set([cleanupTool, inventoryTool, reportTool, startTool, transferTool]).size !== 5) {
     fail("runtime tools must be distinct");
   }
   return {
     bundleSha256,
+    cleanupTool,
     destination: requireDestination(runtime.destination, "runtime.destination"),
     entrypointResource: requireIdentifier(
       runtime.entrypoint_resource,
@@ -398,6 +403,7 @@ function parseConfiguration(value: unknown): OpenCodeConfiguration {
       "webfetch",
       "websearch",
       "write",
+      "ys_trace_cleanup_run",
       "ys_trace_inventory_remote_input",
       "ys_trace_provide_validation_report",
       "ys_trace_ssh_transport",
@@ -410,6 +416,7 @@ function parseConfiguration(value: unknown): OpenCodeConfiguration {
   const permissions = parsePermissions(configuration.permissions);
   const runtime = parseRuntime(configuration.runtime);
   if (
+    permissions[runtime.cleanupTool] !== "allow" ||
     permissions[runtime.startTool] !== "allow" ||
     permissions[runtime.reportTool] !== "allow" ||
     permissions[runtime.inventoryTool] !== "allow" ||
@@ -527,7 +534,7 @@ function generateCommand(configuration: OpenCodeConfiguration, body: string): Ui
       "",
       `User input: ${configuration.command.argumentPlaceholder}`,
       "",
-      `After collecting both required inputs, call ${configuration.runtime.startTool} with those exact values and the optional artifact_root override. For an explicitly requested SSH source, also pass the exact ssh_alias and any user-specified ssh_limits; never infer an alias. Present the returned absolute artifact_root and exact transport plan before any later effect. After approval, use ${configuration.runtime.inventoryTool} only for the returned run and plan digest, present the complete inventory, and stop for explicit transfer confirmation. Only after that confirmation, call ${configuration.runtime.transferTool} with the unchanged run, plan, and inventory digests.`,
+      `After collecting both required inputs, call ${configuration.runtime.startTool} with those exact values and the optional artifact_root override. For an explicitly requested SSH source, also pass the exact ssh_alias and any user-specified ssh_limits; never infer an alias. Present the returned absolute artifact_root and exact transport plan before any later effect. After approval, use ${configuration.runtime.inventoryTool} only for the returned run and plan digest, present the complete inventory, and stop for explicit transfer confirmation. Only after that confirmation, call ${configuration.runtime.transferTool} with the unchanged run, plan, and inventory digests. If the transfer is declined or the run otherwise reaches a terminal point, call ${configuration.runtime.cleanupTool} with the unchanged run identifier.`,
       "",
       body,
     ].join("\n"),
