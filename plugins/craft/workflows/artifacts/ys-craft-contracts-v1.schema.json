@@ -397,10 +397,14 @@
             "artifact_type",
             "blueprint_canonical_digest",
             "blueprint_raw_blob_digest",
+            "candidate_payload_digest",
             "final_status",
+            "function_identity",
             "overall_status",
             "repository_binding_ref",
-            "sealed_function_directory_digest"
+            "sealed_function_directory_digest",
+            "source_path",
+            "validation"
           ],
           "properties": {
             "artifact_type": {
@@ -410,6 +414,9 @@
               "$ref": "#/$defs/digest"
             },
             "blueprint_raw_blob_digest": {
+              "$ref": "#/$defs/digest"
+            },
+            "candidate_payload_digest": {
               "$ref": "#/$defs/digest"
             },
             "final_status": {
@@ -428,6 +435,22 @@
             },
             "sealed_function_directory_digest": {
               "$ref": "#/$defs/digest"
+            },
+            "source_path": {
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/relative_path"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "function_identity": {
+              "$ref": "#/$defs/trace_function_identity"
+            },
+            "validation": {
+              "$ref": "#/$defs/sealed_validation_summary"
             }
           }
         }
@@ -448,6 +471,7 @@
             "artifact_type",
             "blueprint_canonical_digest",
             "repository_binding_ref",
+            "resolved_repository",
             "review_subject_digest",
             "review_subject_ref",
             "reviewer_session_id",
@@ -466,6 +490,9 @@
             "repository_binding_ref": {
               "$ref": "#/$defs/artifact_ref"
             },
+            "resolved_repository": {
+              "$ref": "#/$defs/resolved_repository"
+            },
             "review_subject_digest": {
               "$ref": "#/$defs/digest"
             },
@@ -482,6 +509,104 @@
         }
       ],
       "unevaluatedProperties": false
+    },
+    "trace_function_identity": {
+      "title": "TraceFunctionIdentity",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["function_name", "rank", "software", "test_case"],
+      "properties": {
+        "function_name": {
+          "$ref": "#/$defs/non_empty_string"
+        },
+        "rank": {
+          "type": "string",
+          "pattern": "^[0-9]{3}$"
+        },
+        "software": {
+          "$ref": "#/$defs/non_empty_string"
+        },
+        "test_case": {
+          "$ref": "#/$defs/non_empty_string"
+        }
+      }
+    },
+    "evidence_digest": {
+      "title": "SealedEvidenceDigest",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["digest", "path"],
+      "properties": {
+        "digest": {
+          "$ref": "#/$defs/digest"
+        },
+        "path": {
+          "$ref": "#/$defs/relative_path"
+        }
+      }
+    },
+    "sealed_validation_summary": {
+      "title": "SealedValidationSummary",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "claim_to_evidence_digest",
+        "diagnosis_digest",
+        "evidence",
+        "machine_validation_digest",
+        "semantic_validation_digest"
+      ],
+      "properties": {
+        "claim_to_evidence_digest": {
+          "$ref": "#/$defs/digest"
+        },
+        "diagnosis_digest": {
+          "$ref": "#/$defs/digest"
+        },
+        "evidence": {
+          "type": "array",
+          "minItems": 3,
+          "items": {
+            "$ref": "#/$defs/evidence_digest"
+          }
+        },
+        "machine_validation_digest": {
+          "$ref": "#/$defs/digest"
+        },
+        "semantic_validation_digest": {
+          "$ref": "#/$defs/digest"
+        }
+      }
+    },
+    "resolved_repository": {
+      "title": "ResolvedRepository",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["commit_sha", "repository_url", "source_realpath", "target_worktree_realpath"],
+      "properties": {
+        "commit_sha": {
+          "type": "string",
+          "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$"
+        },
+        "repository_url": {
+          "type": "string",
+          "format": "uri",
+          "pattern": "^(?:https?|ssh)://"
+        },
+        "source_realpath": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/realpath"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "target_worktree_realpath": {
+          "$ref": "#/$defs/realpath"
+        }
+      }
     },
     "repository_binding": {
       "title": "RepositoryBinding",

@@ -84,7 +84,10 @@ function inspectPaths(value: unknown): void {
   for (const [key, field] of Object.entries(value)) {
     if (typeof field === "string" && key.endsWith("_realpath")) {
       assertCanonicalPath(field, true);
-    } else if (typeof field === "string" && (key === "cwd" || key === "path")) {
+    } else if (
+      typeof field === "string" &&
+      (key === "cwd" || key === "path" || key === "source_path")
+    ) {
       assertCanonicalPath(field, false);
     }
     inspectPaths(field);
@@ -148,6 +151,10 @@ function assertContractSemantics(contract: YuanshengCraftContractV1): void {
       break;
     case "blueprint-review-subject":
       assertRefType(contract.repository_binding_ref, "repository-binding");
+      assertUnique(
+        contract.validation.evidence.map((evidence) => evidence.path),
+        "sealed evidence path",
+      );
       break;
     case "blueprint-review-attestation":
       assertRefType(contract.repository_binding_ref, "repository-binding");
@@ -593,8 +600,22 @@ export function validateCraftContractGraph(
       assertRootCauseGraph(contract, index);
     } else if (contract.artifact_type === "blueprint-review-attestation") {
       const subject = getContract(index, contract.review_subject_ref, "blueprint-review-subject");
+      const binding = getContract(index, contract.repository_binding_ref, "repository-binding");
       if (contract.review_subject_digest !== subject.artifact_digest) {
         fail("reference-mismatch", "Attestation subject digest does not resolve to its subject");
+      }
+      if (
+        contract.resolved_repository.commit_sha !== binding.commit_sha ||
+        contract.resolved_repository.repository_url !== binding.repository_url ||
+        contract.resolved_repository.target_worktree_realpath !==
+          binding.target_worktree_realpath ||
+        (subject.source_path === null) !==
+          (contract.resolved_repository.source_realpath === null) ||
+        (subject.source_path !== null &&
+          contract.resolved_repository.source_realpath !==
+            `${binding.product_root_realpath}/${subject.source_path}`)
+      ) {
+        fail("reference-mismatch", "Attestation repository resolution does not match its binding");
       }
     } else if (contract.artifact_type === "patch-plan") {
       assertPlanGraph(contract, index);

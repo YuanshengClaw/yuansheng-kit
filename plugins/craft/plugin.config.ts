@@ -89,6 +89,36 @@ export default {
       },
       requires: ["craft-contract-schema"],
     },
+    "craft-blueprint-import-transaction": {
+      kind: "workflow",
+      logicalPath: "workflows/blueprint-import/transaction.ts",
+      source: {
+        kind: "file",
+        path: "plugins/craft/workflows/blueprint-import/transaction.ts",
+      },
+      requires: [
+        "craft-blueprint-import-verifier",
+        "craft-contract-canonical",
+        "craft-contract-generated-index",
+        "craft-contract-parser",
+        "craft-contract-strict-json",
+      ],
+    },
+    "craft-blueprint-import-verifier": {
+      kind: "workflow",
+      logicalPath: "workflows/blueprint-import/sealed-verifier.ts",
+      source: {
+        kind: "file",
+        path: "plugins/craft/workflows/blueprint-import/sealed-verifier.ts",
+      },
+      requires: [
+        "craft-contract-canonical",
+        "craft-contract-strict-json",
+        "root-cause-blueprint-type",
+        "root-cause-blueprint-validator",
+        "root-cause-semantic-rules",
+      ],
+    },
     "craft-tool-surface": {
       kind: "workflow",
       logicalPath: "workflows/tool-surface.ts",
@@ -136,7 +166,38 @@ export default {
         kind: "file",
         path: "plugins/craft/opencode/src/index.ts",
       },
-      requires: ["craft-contract-parser", "craft-tool-surface"],
+      requires: [
+        "craft-blueprint-import-transaction",
+        "craft-blueprint-import-verifier",
+        "craft-contract-parser",
+        "craft-tool-surface",
+      ],
+    },
+    "root-cause-blueprint-type": {
+      kind: "runtime-library",
+      logicalPath:
+        "runtime/root-cause-blueprint/generated/yuansheng-root-cause-blueprint-v1-lite.ts",
+      source: {
+        kind: "file",
+        path: "tools/yuansheng-root-cause-blueprint/src/generated/types/yuansheng-root-cause-blueprint-v1-lite.ts",
+      },
+    },
+    "root-cause-blueprint-validator": {
+      kind: "runtime-library",
+      logicalPath: "runtime/root-cause-blueprint/generated/validators.ts",
+      source: {
+        kind: "file",
+        path: "tools/yuansheng-root-cause-blueprint/src/generated/validators.ts",
+      },
+    },
+    "root-cause-semantic-rules": {
+      kind: "runtime-library",
+      logicalPath: "runtime/root-cause-blueprint/semantic-rules.ts",
+      source: {
+        kind: "file",
+        path: "tools/yuansheng-root-cause-blueprint/src/semantic-rules.ts",
+      },
+      requires: ["root-cause-blueprint-type"],
     },
     "workflow-coordination-skill": {
       kind: "skill",
@@ -181,7 +242,7 @@ export default {
         runtime: {
           destination: ".opencode/plugins/ys-craft.js",
           entrypointResource: "opencode-runtime-entry",
-          external: ["node:crypto", "node:path"],
+          external: ["node:crypto", "node:fs/promises", "node:path"],
           packageResource: "opencode-package",
         },
       } satisfies OpenCodeConfiguration,

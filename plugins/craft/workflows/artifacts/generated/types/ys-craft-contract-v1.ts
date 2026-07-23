@@ -82,6 +82,7 @@ export type BlueprintReviewSubject = ArtifactBase & {
   artifact_type: "blueprint-review-subject";
   blueprint_canonical_digest: Digest;
   blueprint_raw_blob_digest: Digest;
+  candidate_payload_digest: Digest;
   final_status:
     | "confirmed_root_cause"
     | "probable_root_cause"
@@ -90,17 +91,23 @@ export type BlueprintReviewSubject = ArtifactBase & {
   overall_status: "confirmed" | "probable" | "insufficient_evidence" | "false_alarm";
   repository_binding_ref: ArtifactRef;
   sealed_function_directory_digest: Digest;
+  source_path: RelativePath | null;
+  function_identity: TraceFunctionIdentity;
+  validation: SealedValidationSummary;
 };
+export type RelativePath = string;
 export type BlueprintReviewAttestation = ArtifactBase & {
   action: "allow" | "deny";
   artifact_type: "blueprint-review-attestation";
   blueprint_canonical_digest: Digest;
   repository_binding_ref: ArtifactRef;
+  resolved_repository: ResolvedRepository;
   review_subject_digest: Digest;
   review_subject_ref: ArtifactRef;
   reviewer_session_id: OpaqueId;
   sealed_function_directory_digest: Digest;
 };
+export type Realpath = string;
 export type RepositoryBinding = ArtifactBase & {
   artifact_type: "repository-binding";
   commit_sha: string;
@@ -111,7 +118,6 @@ export type RepositoryBinding = ArtifactBase & {
   target_worktree_realpath: Realpath;
   tree_digest: Digest;
 };
-export type Realpath = string;
 export type PatchPlan = ArtifactBase &
   WorkflowArtifactBase & {
     artifact_type: "patch-plan";
@@ -132,7 +138,6 @@ export type PatchPlan = ArtifactBase &
     root_cause_ref: ArtifactRef;
     status: "approved";
   };
-export type RelativePath = string;
 export type MutationAuthorization = ArtifactBase &
   WorkflowArtifactBase & {
     action: "allow";
@@ -339,6 +344,37 @@ export interface BlueprintProvenance {
   blueprint_raw_blob_digest: Digest;
   review_subject_ref: ArtifactRef;
   sealed_function_directory_digest: Digest;
+}
+export interface TraceFunctionIdentity {
+  function_name: NonEmptyString;
+  rank: string;
+  software: NonEmptyString;
+  test_case: NonEmptyString;
+}
+export interface SealedValidationSummary {
+  claim_to_evidence_digest: Digest;
+  diagnosis_digest: Digest;
+  /**
+   * @minItems 3
+   */
+  evidence: [
+    SealedEvidenceDigest,
+    SealedEvidenceDigest,
+    SealedEvidenceDigest,
+    ...SealedEvidenceDigest[],
+  ];
+  machine_validation_digest: Digest;
+  semantic_validation_digest: Digest;
+}
+export interface SealedEvidenceDigest {
+  digest: Digest;
+  path: RelativePath;
+}
+export interface ResolvedRepository {
+  commit_sha: string;
+  repository_url: string;
+  source_realpath: Realpath | null;
+  target_worktree_realpath: Realpath;
 }
 export interface PlannedChange {
   id: OpaqueId;

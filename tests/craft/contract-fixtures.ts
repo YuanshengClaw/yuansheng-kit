@@ -50,7 +50,11 @@ function encode(contract: YuanshengCraftContractV1): Uint8Array {
   return canonicalizeJson(contract).bytes;
 }
 
-function repositoryBinding(): RepositoryBinding {
+export function makeRepositoryBinding(
+  overrides: Partial<
+    Omit<RepositoryBinding, "artifact_digest" | "artifact_type" | "artifact_version">
+  > = {},
+): RepositoryBinding {
   return makeContract<RepositoryBinding>({
     artifact_type: "repository-binding",
     artifact_version: 1,
@@ -62,6 +66,7 @@ function repositoryBinding(): RepositoryBinding {
     repository_url: "https://example.invalid/project.git",
     target_worktree_realpath: "/workspace/project",
     tree_digest: BINDING_TREE_DIGEST,
+    ...overrides,
   });
 }
 
@@ -87,7 +92,7 @@ function rootCauseCriteria(): RootCauseArtifact["criteria"] {
 }
 
 export function makeProblemEntryGraph(): readonly YuanshengCraftContractV1[] {
-  const binding = repositoryBinding();
+  const binding = makeRepositoryBinding();
   const rootCause = makeContract<RootCauseArtifact>({
     artifact_type: "root-cause",
     artifact_version: 1,
@@ -124,17 +129,45 @@ export function makeBlueprintEntryGraph(
   overallStatus: BlueprintReviewSubject["overall_status"] = "confirmed",
   finalStatus: BlueprintReviewSubject["final_status"] = "confirmed_root_cause",
 ): readonly YuanshengCraftContractV1[] {
-  const binding = repositoryBinding();
+  const binding = makeRepositoryBinding();
   const subject = makeContract<BlueprintReviewSubject>({
     artifact_type: "blueprint-review-subject",
     artifact_version: 1,
     blueprint_canonical_digest: BLUEPRINT_CANONICAL_DIGEST,
     blueprint_raw_blob_digest: BLUEPRINT_RAW_DIGEST,
+    candidate_payload_digest: digest("candidate payload"),
     created_at: CREATED_AT,
     final_status: finalStatus,
+    function_identity: {
+      function_name: "normalize",
+      rank: "001",
+      software: "example-project",
+      test_case: "configuration",
+    },
     overall_status: overallStatus,
     repository_binding_ref: artifactRef(binding),
     sealed_function_directory_digest: SEALED_DIRECTORY_DIGEST,
+    source_path: "src/normalize.ts",
+    validation: {
+      claim_to_evidence_digest: digest("claim to evidence"),
+      diagnosis_digest: digest("diagnosis"),
+      evidence: [
+        {
+          digest: digest("annotate evidence"),
+          path: "evidence/annotate.txt",
+        },
+        {
+          digest: digest("hardware profile"),
+          path: "evidence/hardware-profile.json",
+        },
+        {
+          digest: digest("perf stat"),
+          path: "evidence/perf-stat.txt",
+        },
+      ],
+      machine_validation_digest: digest("machine validation"),
+      semantic_validation_digest: digest("semantic validation"),
+    },
   });
   const attestation = makeContract<BlueprintReviewAttestation>({
     action,
@@ -143,6 +176,12 @@ export function makeBlueprintEntryGraph(
     blueprint_canonical_digest: BLUEPRINT_CANONICAL_DIGEST,
     created_at: "2026-07-24T08:01:00.000Z",
     repository_binding_ref: artifactRef(binding),
+    resolved_repository: {
+      commit_sha: binding.commit_sha,
+      repository_url: binding.repository_url,
+      source_realpath: "/workspace/project/src/normalize.ts",
+      target_worktree_realpath: binding.target_worktree_realpath,
+    },
     review_subject_digest: subject.artifact_digest,
     review_subject_ref: artifactRef(subject),
     reviewer_session_id: REVIEW_SESSION_ID,

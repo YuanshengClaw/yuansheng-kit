@@ -11,6 +11,26 @@ export {
   parseCraftContractGraph,
   validateCraftContractGraph,
 } from "../../workflows/artifacts/parser";
+export type {
+  TraceFunctionIdentity,
+  VerifiedEvidenceDigest,
+  VerifiedSealedBlueprint,
+  VerifiedSealedBlueprintSnapshot,
+} from "../../workflows/blueprint-import/sealed-verifier";
+export {
+  snapshotVerifiedSealedBlueprint,
+  verifySealedBlueprintDirectory,
+} from "../../workflows/blueprint-import/sealed-verifier";
+export type {
+  BlueprintImportTransaction,
+  BlueprintReviewContext,
+  BlueprintReviewOutcome,
+} from "../../workflows/blueprint-import/transaction";
+export {
+  buildBlueprintReviewAttestation,
+  buildBlueprintReviewSubject,
+  reviewBlueprintForImport,
+} from "../../workflows/blueprint-import/transaction";
 
 const TOOL_DESCRIPTIONS = Object.freeze(
   Object.fromEntries(
