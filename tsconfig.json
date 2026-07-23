@@ -28,6 +28,10 @@
   },
 
   "include": [
+    "plugins/craft/plugin.config.ts",
+    "plugins/craft/workflows/**/*.ts",
+    "plugins/craft/opencode/src/**/*.ts",
+    "plugins/craft/opencode/tests/**/*.ts",
     "plugins/trace/plugin.config.ts",
     "plugins/trace/workflows/**/*.ts",
     "plugins/trace/opencode/src/**/*.ts",

@@ -202,7 +202,7 @@ function hasPlatformMarker(path: string, contents: string): boolean {
   return false;
 }
 
-test("OpenCode API imports stay inside the platform layer and its tests", async () => {
+test("OpenCode API imports stay inside platform layers and their tests", async () => {
   const files = await collectFiles(WORKSPACE_ROOT);
   const offenders: string[] = [];
   for (const path of files) {
@@ -210,10 +210,7 @@ test("OpenCode API imports stay inside the platform layer and its tests", async 
       continue;
     }
     const logicalPath = workspacePath(path);
-    if (
-      logicalPath.startsWith("plugins/trace/opencode/") ||
-      logicalPath.startsWith("tests/trace/opencode/")
-    ) {
+    if (/^(?:plugins|tests)\/[^/]+\/opencode\//u.test(logicalPath)) {
       continue;
     }
     if (OPENCODE_API_PATTERN.test(await readFile(path, "utf8"))) {
@@ -223,15 +220,13 @@ test("OpenCode API imports stay inside the platform layer and its tests", async 
   expect(offenders).toEqual([]);
 });
 
-test("platform-neutral trace assets do not contain OpenCode registration markers", async () => {
+test("platform-neutral plugin assets do not contain OpenCode registration markers", async () => {
   const sharedDirectories = [
-    "agents",
-    "commands",
-    "resources",
-    "skills",
-    "transport",
-    "workflows",
-  ].map((name) => join(WORKSPACE_ROOT, "plugins/trace", name));
+    ...["agents", "commands", "resources", "skills", "transport", "workflows"].map((name) =>
+      join(WORKSPACE_ROOT, "plugins/trace", name),
+    ),
+    ...["agents", "skills", "workflows"].map((name) => join(WORKSPACE_ROOT, "plugins/craft", name)),
+  ];
   const files = (await Promise.all(sharedDirectories.map(collectFiles))).flat();
   const offenders: string[] = [];
   for (const path of files) {
@@ -268,9 +263,26 @@ test("OpenCode trace package identity is canonical", async () => {
   });
 });
 
+test("OpenCode Craft package identity is canonical", async () => {
+  const packageManifest: unknown = JSON.parse(
+    await readFile(join(WORKSPACE_ROOT, "plugins/craft/opencode/package.json"), "utf8"),
+  );
+  const bunLock = Bun.JSONC.parse(await readFile(join(WORKSPACE_ROOT, "bun.lock"), "utf8"));
+  expect(packageManifest).toMatchObject({
+    name: "opencode-ys-craft",
+  });
+  expect(bunLock).toMatchObject({
+    workspaces: {
+      "plugins/craft/opencode": {
+        name: "opencode-ys-craft",
+      },
+    },
+  });
+});
+
 test("plugin builder remains platform-neutral", async () => {
   const builderRoot = join(WORKSPACE_ROOT, "tools/plugin-builder");
-  const traceRoot = join(WORKSPACE_ROOT, "plugins/trace");
+  const pluginRoots = ["craft", "trace"].map((plugin) => join(WORKSPACE_ROOT, "plugins", plugin));
   const builderSources = (await collectFiles(join(builderRoot, "src"))).filter((path) =>
     OPENCODE_SOURCE_EXTENSIONS.has(extname(path)),
   );
@@ -279,11 +291,15 @@ test("plugin builder remains platform-neutral", async () => {
     const references = staticModuleReferences(path, await readFile(path, "utf8"));
     for (const reference of references) {
       const importsOpenCodeSdk = /^@opencode-ai\/plugin(?:\/|$)/u.test(reference.specifier);
-      const importsTracePackage =
-        /^@yuansheng-kit\/opencode-ys-trace(?:\/|$)/u.test(reference.specifier) ||
-        /^(?:plugins\/trace)(?:\/|$)/u.test(reference.specifier) ||
-        specifierResolvesInside(path, reference.specifier, traceRoot);
-      if (importsOpenCodeSdk || importsTracePackage) {
+      const importsPluginPackage =
+        /^(?:@yuansheng-kit\/opencode-ys-trace|opencode-ys-craft)(?:\/|$)/u.test(
+          reference.specifier,
+        ) ||
+        /^(?:plugins\/(?:craft|trace))(?:\/|$)/u.test(reference.specifier) ||
+        pluginRoots.some((pluginRoot) =>
+          specifierResolvesInside(path, reference.specifier, pluginRoot),
+        );
+      if (importsOpenCodeSdk || importsPluginPackage) {
         forbiddenImports.push(`${workspacePath(path)} -> ${reference.specifier}`);
       }
     }
@@ -292,20 +308,24 @@ test("plugin builder remains platform-neutral", async () => {
 });
 
 test("OpenCode platform handler imports plugin-builder contracts only as types", async () => {
-  const handlerPath = join(WORKSPACE_ROOT, "plugins/trace/opencode/src/platform-handler.ts");
   const builderRoot = join(WORKSPACE_ROOT, "tools/plugin-builder");
-  const references = staticModuleReferences(handlerPath, await readFile(handlerPath, "utf8"));
-  const builderImports = references.filter(
-    (reference) =>
-      /^@yuansheng-kit\/plugin-builder(?:\/|$)/u.test(reference.specifier) ||
-      specifierResolvesInside(handlerPath, reference.specifier, builderRoot),
+  const handlerPaths = ["craft", "trace"].map((plugin) =>
+    join(WORKSPACE_ROOT, "plugins", plugin, "opencode/src/platform-handler.ts"),
   );
+  for (const handlerPath of handlerPaths) {
+    const references = staticModuleReferences(handlerPath, await readFile(handlerPath, "utf8"));
+    const builderImports = references.filter(
+      (reference) =>
+        /^@yuansheng-kit\/plugin-builder(?:\/|$)/u.test(reference.specifier) ||
+        specifierResolvesInside(handlerPath, reference.specifier, builderRoot),
+    );
 
-  expect(builderImports.length).toBeGreaterThan(0);
-  expect(
-    builderImports
-      .filter((reference) => !reference.typeOnly)
-      .map((reference) => reference.specifier)
-      .sort(),
-  ).toEqual([]);
+    expect(builderImports.length).toBeGreaterThan(0);
+    expect(
+      builderImports
+        .filter((reference) => !reference.typeOnly)
+        .map((reference) => reference.specifier)
+        .sort(),
+    ).toEqual([]);
+  }
 });

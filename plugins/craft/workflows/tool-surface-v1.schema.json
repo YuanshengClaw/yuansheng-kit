@@ -1,0 +1,86 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:yuansheng-kit:plugins:craft:tool-surface:v1",
+  "title": "Yuansheng Craft tool surface v1",
+  "type": "array",
+  "minItems": 12,
+  "maxItems": 12,
+  "items": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "allowedPhases",
+      "artifactOwnership",
+      "createsWorkflow",
+      "id",
+      "parameters",
+      "principalSource",
+      "visibility"
+    ],
+    "properties": {
+      "allowedPhases": {
+        "type": "array",
+        "minItems": 1,
+        "uniqueItems": true,
+        "items": {
+          "enum": [
+            "pre_workflow",
+            "intake",
+            "root_cause",
+            "planning",
+            "building",
+            "verifying",
+            "reviewing",
+            "delivering",
+            "completed",
+            "blocked"
+          ]
+        }
+      },
+      "artifactOwnership": {
+        "oneOf": [
+          {
+            "type": "string",
+            "minLength": 1
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "createsWorkflow": {
+        "type": "boolean"
+      },
+      "id": {
+        "type": "string",
+        "pattern": "^ys_craft_[a-z][a-z0-9]*(?:_[a-z0-9]+)*$"
+      },
+      "parameters": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["name", "required", "type"],
+          "properties": {
+            "name": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$"
+            },
+            "required": {
+              "const": true
+            },
+            "type": {
+              "enum": ["non_empty_string", "non_negative_integer"]
+            }
+          }
+        }
+      },
+      "principalSource": {
+        "const": "trusted-platform-tool-context"
+      },
+      "visibility": {
+        "enum": ["workflow-entry", "agent-internal"]
+      }
+    }
+  }
+}
