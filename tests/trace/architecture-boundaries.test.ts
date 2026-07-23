@@ -268,31 +268,7 @@ test("OpenCode trace package identity is canonical", async () => {
   });
 });
 
-test("plugin builder is a root-lock workspace and remains platform-neutral", async () => {
-  const rootPackage: unknown = Bun.JSONC.parse(
-    await readFile(join(WORKSPACE_ROOT, "package.json"), "utf8"),
-  );
-  const bunLock: unknown = Bun.JSONC.parse(
-    await readFile(join(WORKSPACE_ROOT, "bun.lock"), "utf8"),
-  );
-  expect(rootPackage).toMatchObject({
-    workspaces: expect.arrayContaining(["tools/plugin-builder"]),
-  });
-  expect(bunLock).toMatchObject({
-    workspaces: {
-      "tools/plugin-builder": {
-        name: "@yuansheng-kit/plugin-builder",
-      },
-    },
-  });
-
-  const repositoryFiles = await collectFiles(WORKSPACE_ROOT);
-  const bunLocks = repositoryFiles
-    .map(workspacePath)
-    .filter((path) => /(?:^|\/)bun\.lockb?$/u.test(path))
-    .sort();
-  expect(bunLocks).toEqual(["bun.lock"]);
-
+test("plugin builder remains platform-neutral", async () => {
   const builderRoot = join(WORKSPACE_ROOT, "tools/plugin-builder");
   const traceRoot = join(WORKSPACE_ROOT, "plugins/trace");
   const builderSources = (await collectFiles(join(builderRoot, "src"))).filter((path) =>

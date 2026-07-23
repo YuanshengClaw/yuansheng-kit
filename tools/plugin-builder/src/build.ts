@@ -4,9 +4,9 @@ import { SourceTextModule } from "node:vm";
 import { type ArtifactOutputFile, commitArtifact } from "./artifact";
 import { expandBunBundleOutput } from "./bun-bundle";
 import { PLUGIN_BUILDER_BUN_VERSION } from "./cli-contract";
+import { loadPluginConfig, selectPluginConfig } from "./config";
 import { PluginBuilderError } from "./errors";
-import { canonicalJson, sha256Hex } from "./json";
-import { selectManifest } from "./manifest";
+import { canonicalJson, canonicalJsonBytes, sha256Hex } from "./json";
 import { createResolvedAssembly } from "./model";
 import { assertSafeRelativePosixPath, isPathWithin } from "./paths";
 import type {
@@ -23,19 +23,19 @@ import {
 import { readStableOpenFile, WorkspaceReader } from "./workspace-fs";
 
 export interface BuildPluginOptions {
-  readonly manifestPath: string;
+  readonly configPath: string;
   readonly outputPath: string;
   readonly platform: string;
   readonly workspaceRoot: string;
 }
 
-export interface BuildReceiptV1 extends JsonObject {
+export interface BuildReceiptV2 extends JsonObject {
   readonly artifact_manifest_sha256: string;
   readonly artifact_name: string;
   readonly bun_lock_sha256: string;
   readonly content_tree_sha256: string;
-  readonly format_version: 1;
-  readonly manifest_sha256: string;
+  readonly config_sha256: string;
+  readonly format_version: 2;
   readonly output: string;
   readonly platform: string;
   readonly plugin: string;
@@ -213,7 +213,7 @@ function expandCopyOutput(
       `Platform handler selected undeclared resource ${output.resourceId}`,
     );
   }
-  if (resource.manifest.source.kind === "file") {
+  if (resource.config.source.kind === "file") {
     const file = resource.files[0];
     if (file === undefined) {
       throw new PluginBuilderError(
@@ -304,7 +304,7 @@ async function runHandler(
 async function buildPluginWithWorkspace(
   options: BuildPluginOptions,
   workspace: WorkspaceReader,
-): Promise<BuildReceiptV1> {
+): Promise<BuildReceiptV2> {
   if (Bun.version !== PLUGIN_BUILDER_BUN_VERSION) {
     throw new PluginBuilderError(
       "bun-version-mismatch",
@@ -314,16 +314,16 @@ async function buildPluginWithWorkspace(
   }
   const workspaceRoot = workspace.rootPath;
   const buildDefinition = await readBuildDefinition(workspace);
-  const manifestFile = await readWorkspaceFile(workspace, options.manifestPath, "Plugin manifest");
-  const manifestPath = manifestFile.path;
-  const manifestBytes = manifestFile.bytes;
-  const manifestSha256 = sha256Hex(manifestBytes);
+  const configFile = await readWorkspaceFile(workspace, options.configPath, "Plugin configuration");
+  const configPath = configFile.path;
+  const configValue = await loadPluginConfig(configFile.bytes);
   const bunLockSha256 = sha256Hex(buildDefinition.bunLockBytes);
-  const selected = selectManifest(manifestBytes, options.platform);
+  const selected = selectPluginConfig(configValue, options.platform);
+  const configSha256 = sha256Hex(canonicalJsonBytes(selected.config as unknown as JsonValue));
   const snapshots = await resolveResourceSources(workspace, selected.resources);
   const assembly = createResolvedAssembly({
     bunLockSha256,
-    manifestSha256,
+    configSha256,
     selected,
     snapshots,
   });
@@ -348,7 +348,7 @@ async function buildPluginWithWorkspace(
   await verifyResourceSources(workspace, snapshots);
 
   const outputPath = resolveOutputPath(workspaceRoot, options.outputPath, [
-    manifestPath,
+    configPath,
     buildDefinition.packagePath,
     buildDefinition.bunLockPath,
     ...[...snapshots.values()].map((snapshot) => snapshot.absoluteRoot),
@@ -356,28 +356,28 @@ async function buildPluginWithWorkspace(
   const committed = await commitArtifact(
     outputPath,
     {
-      artifactName: selected.platform.artifact_name,
+      artifactName: selected.platform.artifactName,
       bunLockSha256,
-      manifestSha256,
+      configSha256,
       platform: selected.platform.id,
-      pluginId: selected.manifest.plugin.id,
+      pluginId: selected.config.plugin.id,
     },
     files,
   );
   return Object.freeze({
     artifact_manifest_sha256: committed.artifactManifestSha256,
-    artifact_name: selected.platform.artifact_name,
+    artifact_name: selected.platform.artifactName,
     bun_lock_sha256: bunLockSha256,
+    config_sha256: configSha256,
     content_tree_sha256: committed.contentTreeSha256,
-    format_version: 1,
-    manifest_sha256: manifestSha256,
+    format_version: 2,
     output: committed.outputPath,
     platform: selected.platform.id,
-    plugin: selected.manifest.plugin.id,
+    plugin: selected.config.plugin.id,
   });
 }
 
-export async function buildPlugin(options: BuildPluginOptions): Promise<BuildReceiptV1> {
+export async function buildPlugin(options: BuildPluginOptions): Promise<BuildReceiptV2> {
   const workspace = await WorkspaceReader.open(options.workspaceRoot);
   try {
     return await buildPluginWithWorkspace(options, workspace);
@@ -386,6 +386,6 @@ export async function buildPlugin(options: BuildPluginOptions): Promise<BuildRec
   }
 }
 
-export function serializeBuildReceipt(receipt: BuildReceiptV1): string {
+export function serializeBuildReceipt(receipt: BuildReceiptV2): string {
   return canonicalJson(receipt as JsonValue);
 }

@@ -1,5 +1,5 @@
+import type { SelectedPluginConfigV1 } from "./config";
 import { PluginBuilderError } from "./errors";
-import type { SelectedManifestV1 } from "./manifest";
 import { assertSafeRelativePosixPath, compareUtf8 } from "./paths";
 import type {
   JsonObject,
@@ -11,8 +11,8 @@ import type { SourceFileSnapshot, SourceResourceSnapshot } from "./sources";
 
 export interface CreateAssemblyOptions {
   readonly bunLockSha256: string;
-  readonly manifestSha256: string;
-  readonly selected: SelectedManifestV1;
+  readonly configSha256: string;
+  readonly selected: SelectedPluginConfigV1;
   readonly snapshots: ReadonlyMap<string, SourceResourceSnapshot>;
 }
 
@@ -44,7 +44,7 @@ function findSnapshotFile(
       `Resource is outside the resolved closure: ${resourceId}`,
     );
   }
-  if (resource.manifest.source.kind === "file") {
+  if (resource.config.source.kind === "file") {
     if (relativePath !== "") {
       throw new PluginBuilderError(
         "resource-undeclared",
@@ -75,7 +75,7 @@ function resolvedResources(
 ): readonly ResolvedResourceV1[] {
   return Object.freeze(
     [...snapshots.values()]
-      .sort((left, right) => compareUtf8(left.manifest.id, right.manifest.id))
+      .sort((left, right) => compareUtf8(left.config.id, right.config.id))
       .map((snapshot) =>
         Object.freeze({
           files: Object.freeze(
@@ -88,13 +88,13 @@ function resolvedResources(
               }),
             ),
           ),
-          id: snapshot.manifest.id,
-          kind: snapshot.manifest.kind,
-          logicalPath: snapshot.manifest.logical_path,
-          requires: Object.freeze([...snapshot.manifest.requires].sort(compareUtf8)),
+          id: snapshot.config.id,
+          kind: snapshot.config.kind,
+          logicalPath: snapshot.config.logicalPath,
+          requires: Object.freeze([...snapshot.config.requires].sort(compareUtf8)),
           source: Object.freeze({
-            kind: snapshot.manifest.source.kind,
-            path: snapshot.manifest.source.path,
+            kind: snapshot.config.source.kind,
+            path: snapshot.config.source.path,
             sha256: snapshot.sourceSha256,
           }),
         }),
@@ -109,15 +109,15 @@ export function createResolvedAssembly(options: CreateAssemblyOptions): Resolved
   const assembly: ResolvedAssemblyV1 = {
     apiVersion: 1,
     bunLockSha256: options.bunLockSha256,
-    manifestSha256: options.manifestSha256,
+    configSha256: options.configSha256,
     platform: Object.freeze({
-      artifactName: options.selected.platform.artifact_name,
+      artifactName: options.selected.platform.artifactName,
       configuration,
       id: options.selected.platform.id,
     }),
     plugin: Object.freeze({
-      displayName: options.selected.manifest.plugin.display_name,
-      id: options.selected.manifest.plugin.id,
+      displayName: options.selected.config.plugin.displayName,
+      id: options.selected.config.plugin.id,
     }),
     resources: resolvedResources(options.snapshots),
     async readSource(resourceId, relativePath) {

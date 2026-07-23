@@ -53,7 +53,7 @@ export interface ResolvedResourceV1 {
 export interface ResolvedAssemblyV1 {
   readonly apiVersion: 1;
   readonly bunLockSha256: string;
-  readonly manifestSha256: string;
+  readonly configSha256: string;
   readonly platform: ResolvedPlatformV1;
   readonly plugin: ResolvedPluginV1;
   readonly resources: readonly ResolvedResourceV1[];
@@ -77,7 +77,6 @@ export interface BunBundleOutputV1 {
   readonly bundledPackages: readonly BunBundlePackageV1[];
   readonly destination: string;
   readonly entrypoint: string;
-  readonly expectedSha256: string;
   readonly external: readonly string[];
   readonly resources: readonly string[];
   readonly type: "bun-bundle";

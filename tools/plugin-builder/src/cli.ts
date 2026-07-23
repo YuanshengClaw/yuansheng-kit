@@ -3,7 +3,7 @@ import { PLUGIN_BUILDER_COMMAND } from "./cli-contract";
 import { PluginBuilderError } from "./errors";
 
 interface CliOptions {
-  readonly manifestPath: string;
+  readonly configPath: string;
   readonly outputPath: string;
   readonly platform: string;
   readonly workspaceRoot: string;
@@ -11,7 +11,7 @@ interface CliOptions {
 
 const OPTION_NAMES = Object.freeze([
   "--workspace-root",
-  "--manifest",
+  "--config",
   "--platform",
   "--output",
 ] as const);
@@ -50,7 +50,7 @@ function parseArguments(arguments_: readonly string[]): CliOptions {
     }
   }
   return {
-    manifestPath: values.get("--manifest") as string,
+    configPath: values.get("--config") as string,
     outputPath: values.get("--output") as string,
     platform: values.get("--platform") as string,
     workspaceRoot: values.get("--workspace-root") as string,

@@ -30,7 +30,7 @@ export interface ArtifactOutputFile {
 export interface ArtifactMetadata {
   readonly artifactName: string;
   readonly bunLockSha256: string;
-  readonly manifestSha256: string;
+  readonly configSha256: string;
   readonly platform: string;
   readonly pluginId: string;
 }
@@ -111,11 +111,11 @@ function createArtifactManifest(
     bun_lock_sha256: metadata.bunLockSha256,
     content_tree_sha256: contentTreeSha256,
     files: records,
-    format_version: 1,
+    format_version: 2,
     kind: "yuansheng_plugin_artifact",
     platform: metadata.platform,
     plugin_id: metadata.pluginId,
-    source_manifest_sha256: metadata.manifestSha256,
+    source_config_sha256: metadata.configSha256,
   } satisfies JsonValue;
   const bytes = canonicalJsonBytes(manifest);
   return { bytes, contentTreeSha256, sha256: sha256Hex(bytes) };

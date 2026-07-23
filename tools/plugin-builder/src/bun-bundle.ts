@@ -2,7 +2,6 @@ import { posix } from "node:path";
 
 import type { ArtifactOutputFile } from "./artifact";
 import { PluginBuilderError } from "./errors";
-import { sha256Hex } from "./json";
 import { assertSafeRelativePosixPath, isPathWithin } from "./paths";
 import type { SourceResourceSnapshot } from "./sources";
 import { readStableOpenFile, type WorkspaceReader } from "./workspace-fs";
@@ -16,7 +15,6 @@ interface BunBundlePlan {
   readonly bundledPackages: readonly BundledPackage[];
   readonly destination: string;
   readonly entrypoint: string;
-  readonly expectedSha256: string;
   readonly external: readonly string[];
   readonly resources: readonly string[];
 }
@@ -128,7 +126,6 @@ function parsePlan(output: Record<string, unknown>): BunBundlePlan {
     "bundledPackages",
     "destination",
     "entrypoint",
-    "expectedSha256",
     "external",
     "resources",
     "type",
@@ -141,15 +138,10 @@ function parsePlan(output: Record<string, unknown>): BunBundlePlan {
   if (!destination.endsWith(".js")) {
     throw contractError("bun-bundle destination must end with .js");
   }
-  const expectedSha256 = requireString(output.expectedSha256, "bun-bundle expectedSha256");
-  if (!/^[0-9a-f]{64}$/u.test(expectedSha256)) {
-    throw contractError("bun-bundle expectedSha256 must be a lowercase SHA-256 digest");
-  }
   return {
     bundledPackages: requireBundledPackages(output.bundledPackages),
     destination,
     entrypoint: requireString(output.entrypoint, "bun-bundle entrypoint"),
-    expectedSha256,
     external: requireStringArray(output.external, "bun-bundle external", NODE_BUILTIN),
     resources: requireStringArray(output.resources, "bun-bundle resources"),
   };
@@ -191,16 +183,16 @@ function createVirtualSources(
     if (snapshot === undefined) {
       throw contractError(`bun-bundle selected undeclared resource ${resourceId}`);
     }
-    if (snapshot.manifest.source.kind !== "file" || snapshot.files.length !== 1) {
+    if (snapshot.config.source.kind !== "file" || snapshot.files.length !== 1) {
       throw contractError(`bun-bundle resource ${resourceId} must be a single file`);
     }
     const file = snapshot.files[0];
     if (file === undefined) {
       throw contractError(`bun-bundle resource ${resourceId} is empty`);
     }
-    const path = virtualPath(snapshot.manifest.source.path);
+    const path = virtualPath(snapshot.config.source.path);
     if (sources.has(path)) {
-      throw contractError(`bun-bundle source path is duplicated: ${snapshot.manifest.source.path}`);
+      throw contractError(`bun-bundle source path is duplicated: ${snapshot.config.source.path}`);
     }
     sources.set(path, {
       bytes: Uint8Array.from(file.bytes),
@@ -603,11 +595,5 @@ export async function expandBunBundleOutput(
   }
   const bytes = new Uint8Array(await entryOutput.arrayBuffer());
   assertPortableBundle(bytes, workspace.rootPath);
-  const actualSha256 = sha256Hex(bytes);
-  if (actualSha256 !== plan.expectedSha256) {
-    throw buildError(
-      `Bun bundle SHA-256 mismatch: expected ${plan.expectedSha256}, received ${actualSha256}`,
-    );
-  }
   return { bytes, mode: "0644", path: plan.destination };
 }

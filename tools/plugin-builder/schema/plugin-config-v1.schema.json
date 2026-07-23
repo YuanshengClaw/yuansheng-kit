@@ -1,35 +1,35 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:yuansheng-kit:plugin-builder:plugin-manifest:v1",
-  "title": "Yuansheng plugin manifest v1",
-  "description": "Internal manifest for resolving a platform-neutral plugin resource graph and one or more platform assembly targets.",
+  "$id": "urn:yuansheng-kit:plugin-builder:plugin-config:v1",
+  "title": "Yuansheng plugin configuration v1",
+  "description": "Internal typed configuration for resolving a platform-neutral plugin resource graph and one or more platform assembly targets.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["manifest_version", "plugin", "resources", "platforms"],
+  "required": ["version", "plugin", "resources", "platforms"],
   "properties": {
-    "$schema": {
-      "type": "string",
-      "minLength": 1
-    },
-    "manifest_version": {
+    "version": {
       "const": 1
     },
     "plugin": {
       "$ref": "#/$defs/plugin"
     },
     "resources": {
-      "type": "array",
-      "minItems": 1,
-      "uniqueItems": true,
-      "items": {
+      "type": "object",
+      "minProperties": 1,
+      "propertyNames": {
+        "$ref": "#/$defs/identifier"
+      },
+      "additionalProperties": {
         "$ref": "#/$defs/resource"
       }
     },
     "platforms": {
-      "type": "array",
-      "minItems": 1,
-      "uniqueItems": true,
-      "items": {
+      "type": "object",
+      "minProperties": 1,
+      "propertyNames": {
+        "$ref": "#/$defs/identifier"
+      },
+      "additionalProperties": {
         "$ref": "#/$defs/platform"
       }
     }
@@ -39,24 +39,51 @@
       "type": "string",
       "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$"
     },
-    "sha256": {
-      "type": "string",
-      "pattern": "^[0-9a-f]{64}$"
-    },
-    "logical_path": {
+    "logicalPath": {
       "type": "string",
       "minLength": 1,
       "pattern": "^(?!/)(?![A-Za-z]:)(?!.*(?:^|/)(?:\\.|\\.\\.)(?:/|$))(?!.*//)(?!.*\\\\)(?!.*\\u0000).+$"
     },
+    "jsonValue": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "number"
+        },
+        {
+          "type": "string"
+        },
+        {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/jsonValue"
+          }
+        },
+        {
+          "$ref": "#/$defs/jsonObject"
+        }
+      ]
+    },
+    "jsonObject": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/jsonValue"
+      }
+    },
     "plugin": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "display_name"],
+      "required": ["id", "displayName"],
       "properties": {
         "id": {
           "$ref": "#/$defs/identifier"
         },
-        "display_name": {
+        "displayName": {
           "type": "string",
           "minLength": 1
         }
@@ -65,58 +92,49 @@
     "source": {
       "oneOf": [
         {
-          "$ref": "#/$defs/file_source"
+          "$ref": "#/$defs/fileSource"
         },
         {
-          "$ref": "#/$defs/tree_source"
+          "$ref": "#/$defs/treeSource"
         }
       ]
     },
-    "file_source": {
+    "fileSource": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["kind", "path", "sha256"],
+      "required": ["kind", "path"],
       "properties": {
         "kind": {
           "const": "file"
         },
         "path": {
-          "$ref": "#/$defs/logical_path"
-        },
-        "sha256": {
-          "$ref": "#/$defs/sha256"
+          "$ref": "#/$defs/logicalPath"
         }
       }
     },
-    "tree_source": {
+    "treeSource": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["kind", "path", "sha256"],
+      "required": ["kind", "path"],
       "properties": {
         "kind": {
           "const": "tree"
         },
         "path": {
-          "$ref": "#/$defs/logical_path"
-        },
-        "sha256": {
-          "$ref": "#/$defs/sha256"
+          "$ref": "#/$defs/logicalPath"
         }
       }
     },
     "resource": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "kind", "logical_path", "source", "requires"],
+      "required": ["kind", "logicalPath", "source"],
       "properties": {
-        "id": {
-          "$ref": "#/$defs/identifier"
-        },
         "kind": {
           "$ref": "#/$defs/identifier"
         },
-        "logical_path": {
-          "$ref": "#/$defs/logical_path"
+        "logicalPath": {
+          "$ref": "#/$defs/logicalPath"
         },
         "source": {
           "$ref": "#/$defs/source"
@@ -133,9 +151,9 @@
     "handler": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["api_version", "resource", "export"],
+      "required": ["apiVersion", "resource", "export"],
       "properties": {
-        "api_version": {
+        "apiVersion": {
           "const": 1
         },
         "resource": {
@@ -150,12 +168,9 @@
     "platform": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "artifact_name", "roots", "handler", "configuration"],
+      "required": ["artifactName", "roots", "handler", "configuration"],
       "properties": {
-        "id": {
-          "$ref": "#/$defs/identifier"
-        },
-        "artifact_name": {
+        "artifactName": {
           "type": "string",
           "minLength": 1
         },
@@ -171,7 +186,7 @@
           "$ref": "#/$defs/handler"
         },
         "configuration": {
-          "type": "object"
+          "$ref": "#/$defs/jsonObject"
         }
       }
     }

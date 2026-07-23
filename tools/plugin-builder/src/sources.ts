@@ -1,9 +1,9 @@
 import type { Dirent } from "node:fs";
 import { type FileHandle, readdir } from "node:fs/promises";
 
+import type { PluginConfigResourceV1 } from "./config";
 import { PluginBuilderError } from "./errors";
 import { canonicalJsonBytes, sha256Hex } from "./json";
-import type { ManifestResourceV1 } from "./manifest";
 import { assertSafeRelativePosixPath, compareUtf8 } from "./paths";
 import type { JsonValue, SourceFileMode } from "./platform-handler";
 import { readStableOpenFile, type WorkspaceReader } from "./workspace-fs";
@@ -18,7 +18,7 @@ export interface SourceFileSnapshot {
 export interface SourceResourceSnapshot {
   readonly absoluteRoot: string;
   readonly files: readonly SourceFileSnapshot[];
-  readonly manifest: ManifestResourceV1;
+  readonly config: PluginConfigResourceV1;
   readonly sourceSha256: string;
 }
 
@@ -118,7 +118,7 @@ function treeHash(files: readonly SourceFileSnapshot[]): string {
 
 async function readResource(
   workspace: WorkspaceReader,
-  resource: ManifestResourceV1,
+  resource: PluginConfigResourceV1,
 ): Promise<SourceResourceSnapshot> {
   const sourceLabel = `Resource ${resource.id} source`;
   let files: readonly SourceFileSnapshot[];
@@ -152,19 +152,12 @@ async function readResource(
     }
   }
 
-  if (sourceSha256 !== resource.source.sha256) {
-    throw new PluginBuilderError(
-      "source-integrity-mismatch",
-      "input",
-      `Source integrity does not match manifest for resource ${resource.id}: expected ${resource.source.sha256}, received ${sourceSha256}`,
-    );
-  }
-  return { absoluteRoot: sourceRoot, files, manifest: resource, sourceSha256 };
+  return { absoluteRoot: sourceRoot, config: resource, files, sourceSha256 };
 }
 
 export async function resolveResourceSources(
   workspace: WorkspaceReader,
-  resources: readonly ManifestResourceV1[],
+  resources: readonly PluginConfigResourceV1[],
 ): Promise<ReadonlyMap<string, SourceResourceSnapshot>> {
   const entries: [string, SourceResourceSnapshot][] = [];
   for (const resource of resources) {
@@ -180,7 +173,7 @@ export async function verifyResourceSources(
   for (const [resourceId, snapshot] of [...snapshots].sort(([left], [right]) =>
     compareUtf8(left, right),
   )) {
-    const current = await readResource(workspace, snapshot.manifest);
+    const current = await readResource(workspace, snapshot.config);
     const currentInventory = current.files.map((file) => [
       file.relativePath,
       file.mode,

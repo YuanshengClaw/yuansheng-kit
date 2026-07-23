@@ -57,7 +57,6 @@ interface ArtifactRootConfiguration {
 }
 
 interface RuntimeConfiguration {
-  readonly bundleSha256: string;
   readonly cleanupTool: string;
   readonly destination: string;
   readonly entrypointResource: string;
@@ -69,7 +68,7 @@ interface RuntimeConfiguration {
   readonly transferTool: string;
 }
 
-interface OpenCodeConfiguration {
+export interface OpenCodeConfiguration {
   readonly agent: AgentConfiguration;
   readonly artifactRoot: ArtifactRootConfiguration;
   readonly command: CommandConfiguration;
@@ -181,15 +180,15 @@ function parseCommand(value: unknown): CommandConfiguration {
   const command = requireRecord(value, "command");
   requireExactKeys(
     command,
-    ["agent", "argument_placeholder", "description", "destination", "id", "resource"],
+    ["agent", "argumentPlaceholder", "description", "destination", "id", "resource"],
     "command",
   );
   const argumentPlaceholder = requireString(
-    command.argument_placeholder,
-    "command.argument_placeholder",
+    command.argumentPlaceholder,
+    "command.argumentPlaceholder",
   );
   if (argumentPlaceholder !== ARGUMENT_PLACEHOLDER) {
-    fail(`command.argument_placeholder must be ${ARGUMENT_PLACEHOLDER}`);
+    fail(`command.argumentPlaceholder must be ${ARGUMENT_PLACEHOLDER}`);
   }
   return {
     agent: requireIdentifier(command.agent, "command.agent"),
@@ -302,28 +301,23 @@ function parseRuntime(value: unknown): RuntimeConfiguration {
   requireExactKeys(
     runtime,
     [
-      "bundle_sha256",
-      "cleanup_tool",
+      "cleanupTool",
       "destination",
-      "entrypoint_resource",
+      "entrypointResource",
       "external",
-      "inventory_tool",
-      "package_resource",
-      "report_tool",
-      "start_tool",
-      "transfer_tool",
+      "inventoryTool",
+      "packageResource",
+      "reportTool",
+      "startTool",
+      "transferTool",
     ],
     "runtime",
   );
-  const bundleSha256 = requireString(runtime.bundle_sha256, "runtime.bundle_sha256");
-  if (!/^[0-9a-f]{64}$/u.test(bundleSha256)) {
-    fail("runtime.bundle_sha256 must be a lowercase SHA-256 digest");
-  }
-  const cleanupTool = requireString(runtime.cleanup_tool, "runtime.cleanup_tool");
-  const inventoryTool = requireString(runtime.inventory_tool, "runtime.inventory_tool");
-  const reportTool = requireString(runtime.report_tool, "runtime.report_tool");
-  const startTool = requireString(runtime.start_tool, "runtime.start_tool");
-  const transferTool = requireString(runtime.transfer_tool, "runtime.transfer_tool");
+  const cleanupTool = requireString(runtime.cleanupTool, "runtime.cleanupTool");
+  const inventoryTool = requireString(runtime.inventoryTool, "runtime.inventoryTool");
+  const reportTool = requireString(runtime.reportTool, "runtime.reportTool");
+  const startTool = requireString(runtime.startTool, "runtime.startTool");
+  const transferTool = requireString(runtime.transferTool, "runtime.transferTool");
   if (
     !SAFE_PERMISSION_NAME.test(cleanupTool) ||
     !SAFE_PERMISSION_NAME.test(inventoryTool) ||
@@ -337,16 +331,12 @@ function parseRuntime(value: unknown): RuntimeConfiguration {
     fail("runtime tools must be distinct");
   }
   return {
-    bundleSha256,
     cleanupTool,
     destination: requireDestination(runtime.destination, "runtime.destination"),
-    entrypointResource: requireIdentifier(
-      runtime.entrypoint_resource,
-      "runtime.entrypoint_resource",
-    ),
+    entrypointResource: requireIdentifier(runtime.entrypointResource, "runtime.entrypointResource"),
     external: requireUniqueStringArray(runtime.external, "runtime.external", SAFE_NODE_BUILTIN),
     inventoryTool,
-    packageResource: requireIdentifier(runtime.package_resource, "runtime.package_resource"),
+    packageResource: requireIdentifier(runtime.packageResource, "runtime.packageResource"),
     reportTool,
     startTool,
     transferTool,
@@ -354,19 +344,19 @@ function parseRuntime(value: unknown): RuntimeConfiguration {
 }
 
 function parseArtifactRoot(value: unknown): ArtifactRootConfiguration {
-  const artifactRoot = requireRecord(value, "artifact_root");
+  const artifactRoot = requireRecord(value, "artifactRoot");
   requireExactKeys(
     artifactRoot,
-    ["default_relative_path", "requires_resolved_absolute_path"],
-    "artifact_root",
+    ["defaultRelativePath", "requiresResolvedAbsolutePath"],
+    "artifactRoot",
   );
-  if (artifactRoot.requires_resolved_absolute_path !== true) {
-    fail("artifact_root.requires_resolved_absolute_path must be true");
+  if (artifactRoot.requiresResolvedAbsolutePath !== true) {
+    fail("artifactRoot.requiresResolvedAbsolutePath must be true");
   }
   return {
     defaultRelativePath: requireDestination(
-      artifactRoot.default_relative_path,
-      "artifact_root.default_relative_path",
+      artifactRoot.defaultRelativePath,
+      "artifactRoot.defaultRelativePath",
     ),
     requiresResolvedAbsolutePath: true,
   };
@@ -376,7 +366,7 @@ function parseConfiguration(value: unknown): OpenCodeConfiguration {
   const configuration = requireRecord(value, "configuration");
   requireExactKeys(
     configuration,
-    ["agent", "artifact_root", "command", "copies", "permissions", "runtime"],
+    ["agent", "artifactRoot", "command", "copies", "permissions", "runtime"],
     "configuration",
   );
   const agent = parseAgent(configuration.agent);
@@ -390,7 +380,7 @@ function parseConfiguration(value: unknown): OpenCodeConfiguration {
   if (command.destination !== `.opencode/commands/${command.id}.md`) {
     fail("command.destination must match command.id");
   }
-  const artifactRoot = parseArtifactRoot(configuration.artifact_root);
+  const artifactRoot = parseArtifactRoot(configuration.artifactRoot);
   const copies = parseCopies(configuration.copies);
   requireExactKeys(
     requireRecord(configuration.permissions, "permissions"),
@@ -582,7 +572,7 @@ async function validateRuntimePackage(
     configuration.runtime.packageResource,
     "platform-package",
     true,
-    "runtime.package_resource",
+    "runtime.packageResource",
   );
   let packageDefinition: unknown;
   try {
@@ -635,7 +625,7 @@ async function assembleOpenCode(assembly: ResolvedAssemblyV1): Promise<PlatformA
     configuration.runtime.entrypointResource,
     "platform-runtime",
     true,
-    "runtime.entrypoint_resource",
+    "runtime.entrypointResource",
   );
   const bundledPackages = await validateRuntimePackage(assembly, configuration, resources);
   const runtimeResources = runtimeResourceClosure(
@@ -696,7 +686,6 @@ async function assembleOpenCode(assembly: ResolvedAssemblyV1): Promise<PlatformA
       bundledPackages,
       destination: configuration.runtime.destination,
       entrypoint: configuration.runtime.entrypointResource,
-      expectedSha256: configuration.runtime.bundleSha256,
       external: configuration.runtime.external,
       resources: runtimeResources.map((resource) => resource.id),
       type: "bun-bundle",
