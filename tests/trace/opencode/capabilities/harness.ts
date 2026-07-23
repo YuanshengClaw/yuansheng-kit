@@ -867,21 +867,15 @@ export async function createInstalledArtifactEnvironment(
   }
 
   const environment: Record<string, string> = {
-    ALL_PROXY: "http://127.0.0.1:1",
-    BUN_CONFIG_REGISTRY: "http://127.0.0.1:1",
     BUN_INSTALL_CACHE_DIR: bunInstallCacheDirectory,
     GIT_CONFIG_GLOBAL: "/dev/null",
     GIT_CONFIG_NOSYSTEM: "1",
     GIT_OPTIONAL_LOCKS: "0",
     HOME: homeDirectory,
-    HTTPS_PROXY: "http://127.0.0.1:1",
-    HTTP_PROXY: "http://127.0.0.1:1",
     LANG: "C.UTF-8",
     LC_ALL: "C.UTF-8",
     NO_COLOR: "1",
-    NO_PROXY: "127.0.0.1,localhost",
     NPM_CONFIG_CACHE: npmCacheDirectory,
-    NPM_CONFIG_REGISTRY: "http://127.0.0.1:1",
     OPENCODE_AUTH_CONTENT: "{}",
     OPENCODE_CONFIG_CONTENT: installedArtifactOpenCodeConfig(),
     OPENCODE_DISABLE_AUTOCOMPACT: "1",
@@ -900,10 +894,6 @@ export async function createInstalledArtifactEnvironment(
     XDG_CONFIG_HOME: xdgConfigDirectory,
     XDG_DATA_HOME: xdgDataDirectory,
     XDG_STATE_HOME: xdgStateDirectory,
-    all_proxy: "http://127.0.0.1:1",
-    http_proxy: "http://127.0.0.1:1",
-    https_proxy: "http://127.0.0.1:1",
-    no_proxy: "127.0.0.1,localhost",
   };
   return {
     expectedVersion: DEFAULT_EXPECTED_VERSION,

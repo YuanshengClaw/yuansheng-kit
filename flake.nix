@@ -210,6 +210,142 @@
                   "$@"
               '';
 
+            packages = {
+              amd64-nixos =
+                (nixpkgs.lib.nixosSystem {
+                  inherit
+                    system
+                    ;
+
+                  modules = [
+                    {
+                      nixpkgs = {
+                        inherit
+                          pkgs
+                          ;
+                      };
+                    }
+                    "${nixpkgs}/nixos/modules/virtualisation/qemu-vm.nix"
+                    (
+                      {
+                        lib,
+                        pkgs,
+                        ...
+                      }:
+                      let
+                        inherit (lib)
+                          mkForce
+                          ;
+                      in
+                      {
+                        environment = {
+                          systemPackages = [
+                            pkgs.git
+                            pkgs.llm-agents.opencode
+                            (pkgs.python314.withPackages (
+                              ps: with ps; [
+                                pip
+                              ]
+                            ))
+                          ];
+                        };
+
+                        networking = {
+                          defaultGateway = {
+                            address = "192.168.94.1";
+                            interface = "eth0";
+                          };
+
+                          firewall = {
+                            allowedTCPPorts = [
+                              22
+                            ];
+                          };
+
+                          hostName = "amd64-nixos";
+
+                          interfaces = {
+                            eth0 = {
+                              ipv4 = {
+                                addresses = [
+                                  {
+                                    address = "192.168.94.10";
+                                    prefixLength = 24;
+                                  }
+                                ];
+                              };
+
+                              useDHCP = false;
+                            };
+                          };
+
+                          nameservers = [
+                            "1.1.1.1"
+                            "8.8.8.8"
+                          ];
+
+                          useDHCP = false;
+                        };
+
+                        services = {
+                          openssh = {
+                            enable = true;
+                            openFirewall = true;
+
+                            settings = {
+                              PasswordAuthentication = true;
+                              PermitRootLogin = "no";
+                            };
+                          };
+                        };
+
+                        system = {
+                          name = "amd64-nixos";
+                          stateVersion = "26.05";
+                        };
+
+                        users = {
+                          groups = {
+                            test = {
+                              gid = 1000;
+                            };
+                          };
+
+                          mutableUsers = false;
+
+                          users = {
+                            test = {
+                              createHome = true;
+                              extraGroups = [
+                                "wheel"
+                              ];
+                              group = "test";
+                              home = "/home/test";
+                              initialPassword = "test";
+                              isNormalUser = true;
+                              uid = 1000;
+                            };
+                          };
+                        };
+
+                        virtualisation = {
+                          cores = 4;
+                          diskSize = 20480;
+                          memorySize = 4096;
+
+                          qemu = {
+                            networkingOptions = mkForce [
+                              "-netdev tap,id=net0,ifname=amd64-nixos,script=no,downscript=no"
+                              "-device virtio-net-pci,netdev=net0,mac=52:54:00:94:00:10"
+                            ];
+                          };
+                        };
+                      }
+                    )
+                  ];
+                }).config.system.build.vm;
+            };
+
           };
 
         systems = import systems;
