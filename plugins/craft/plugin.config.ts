@@ -15,6 +15,60 @@ export default {
         kind: "file",
         path: "plugins/craft/agents/ys-craft.md",
       },
+      requires: ["verification-source-selection-skill", "workflow-coordination-skill"],
+    },
+    "craft-delivery-coordinator-agent": {
+      kind: "agent",
+      logicalPath: "agents/ys-craft-delivery-coordinator.md",
+      source: {
+        kind: "file",
+        path: "plugins/craft/agents/ys-craft-delivery-coordinator.md",
+      },
+      requires: ["workflow-coordination-skill"],
+    },
+    "craft-patch-builder-agent": {
+      kind: "agent",
+      logicalPath: "agents/ys-craft-patch-builder.md",
+      source: {
+        kind: "file",
+        path: "plugins/craft/agents/ys-craft-patch-builder.md",
+      },
+      requires: ["verification-source-selection-skill", "workflow-coordination-skill"],
+    },
+    "craft-patch-planner-agent": {
+      kind: "agent",
+      logicalPath: "agents/ys-craft-patch-planner.md",
+      source: {
+        kind: "file",
+        path: "plugins/craft/agents/ys-craft-patch-planner.md",
+      },
+      requires: ["workflow-coordination-skill"],
+    },
+    "craft-patch-reviewer-agent": {
+      kind: "agent",
+      logicalPath: "agents/ys-craft-patch-reviewer.md",
+      source: {
+        kind: "file",
+        path: "plugins/craft/agents/ys-craft-patch-reviewer.md",
+      },
+      requires: ["workflow-coordination-skill"],
+    },
+    "craft-regression-verifier-agent": {
+      kind: "agent",
+      logicalPath: "agents/ys-craft-regression-verifier.md",
+      source: {
+        kind: "file",
+        path: "plugins/craft/agents/ys-craft-regression-verifier.md",
+      },
+      requires: ["verification-source-selection-skill", "workflow-coordination-skill"],
+    },
+    "craft-root-cause-analyst-agent": {
+      kind: "agent",
+      logicalPath: "agents/ys-craft-root-cause-analyst.md",
+      source: {
+        kind: "file",
+        path: "plugins/craft/agents/ys-craft-root-cause-analyst.md",
+      },
       requires: ["workflow-coordination-skill"],
     },
     "craft-entry-strategies": {
@@ -268,9 +322,16 @@ export default {
       },
       requires: [
         "craft-agent",
+        "craft-delivery-coordinator-agent",
+        "craft-patch-builder-agent",
+        "craft-patch-planner-agent",
+        "craft-patch-reviewer-agent",
+        "craft-regression-verifier-agent",
+        "craft-root-cause-analyst-agent",
         "craft-tool-surface",
         "opencode-package",
         "opencode-runtime-entry",
+        "verification-source-selection-skill",
         "workflow-coordination-skill",
       ],
     },
@@ -320,6 +381,14 @@ export default {
       },
       requires: ["root-cause-blueprint-type"],
     },
+    "verification-source-selection-skill": {
+      kind: "skill",
+      logicalPath: "skills/verification-source-selection",
+      source: {
+        kind: "tree",
+        path: "plugins/craft/skills/verification-source-selection",
+      },
+    },
     "workflow-coordination-skill": {
       kind: "skill",
       logicalPath: "skills/workflow-coordination",
@@ -348,8 +417,55 @@ export default {
             mode: "primary",
             resource: "craft-agent",
           },
+          {
+            description:
+              "Confirm one evidence-backed root cause for a problem-description workflow.",
+            destination: ".opencode/agents/ys-craft-root-cause-analyst.md",
+            id: "ys-craft-root-cause-analyst",
+            mode: "subagent",
+            resource: "craft-root-cause-analyst-agent",
+          },
+          {
+            description: "Plan the smallest causal patch and its exact mutation authorization.",
+            destination: ".opencode/agents/ys-craft-patch-planner.md",
+            id: "ys-craft-patch-planner",
+            mode: "subagent",
+            resource: "craft-patch-planner-agent",
+          },
+          {
+            description: "Implement the approved patch and capture its immutable candidate.",
+            destination: ".opencode/agents/ys-craft-patch-builder.md",
+            id: "ys-craft-patch-builder",
+            mode: "subagent",
+            resource: "craft-patch-builder-agent",
+          },
+          {
+            description: "Select and run controlled verification for one immutable candidate.",
+            destination: ".opencode/agents/ys-craft-regression-verifier.md",
+            id: "ys-craft-regression-verifier",
+            mode: "subagent",
+            resource: "craft-regression-verifier-agent",
+          },
+          {
+            description: "Independently review one verified immutable patch candidate.",
+            destination: ".opencode/agents/ys-craft-patch-reviewer.md",
+            id: "ys-craft-patch-reviewer",
+            mode: "subagent",
+            resource: "craft-patch-reviewer-agent",
+          },
+          {
+            description: "Assemble the final immutable delivery and user handoff.",
+            destination: ".opencode/agents/ys-craft-delivery-coordinator.md",
+            id: "ys-craft-delivery-coordinator",
+            mode: "subagent",
+            resource: "craft-delivery-coordinator-agent",
+          },
         ],
         copies: [
+          {
+            destination: ".opencode/skills/ys-craft-verification-source-selection",
+            resource: "verification-source-selection-skill",
+          },
           {
             destination: ".opencode/skills/ys-craft-workflow-coordination",
             resource: "workflow-coordination-skill",

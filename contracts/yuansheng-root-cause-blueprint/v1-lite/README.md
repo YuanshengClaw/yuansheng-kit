@@ -63,8 +63,8 @@ the missing fact.
 | `insufficient_evidence` | `insufficient_evidence` |
 | `false_alarm`           | `false_alarm`           |
 
-In v1-lite, `recommend_to_ys_craft` and `proceed_to_optimization` only allow `no`
-or `conditional`. Even a confirmed result requires human review before
+In v1-lite, `recommend_to_ys_craft` and `proceed_to_optimization` only allow
+`no` or `conditional`. Even a confirmed result requires human review before
 optimization.
 
 The Schema cannot prove that a natural-language technical conclusion is true or
