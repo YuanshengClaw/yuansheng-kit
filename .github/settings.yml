@@ -4,18 +4,11 @@ repository:
   private: false
   topics: >-
     agent-skills,
-    ai-agents,
-    anomaly-detection,
     code-generation,
-    hardware-performance-counters,
     knowledge-extraction,
     linux-perf,
-    multi-architecture,
     pattern-mining,
-    performance,
-    performance-analysis,
     performance-optimization,
-    profiling,
     riscv,
     root-cause-analysis
 
