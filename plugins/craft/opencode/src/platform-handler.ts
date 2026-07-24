@@ -24,6 +24,25 @@ const EXPECTED_RUNTIME_DEPENDENCIES = Object.freeze({
   canonicalize: "3.0.0",
   "jsonc-parser": "3.3.1",
 });
+const EXPECTED_EXTERNALS = Object.freeze([
+  "node:crypto",
+  "node:fs",
+  "node:fs/promises",
+  "node:path",
+]);
+const EXPECTED_PERMISSIONS = Object.freeze({
+  "*": "deny",
+  edit: "allow",
+  skill: "allow",
+  write: "allow",
+  "ys_craft_*": "allow",
+  ys_craft_blueprint_review: "ask",
+  ys_craft_external_directory: "ask",
+  ys_craft_human_criterion: "ask",
+  ys_craft_patch_plan: "ask",
+  ys_craft_repository_preparation: "ask",
+  ys_craft_verification_manifest: "ask",
+} satisfies Readonly<Record<string, PermissionAction>>);
 
 type PermissionAction = "allow" | "ask" | "deny";
 
@@ -239,10 +258,17 @@ function parseRuntime(value: unknown): RuntimeConfiguration {
     ["destination", "entrypointResource", "external", "packageResource"],
     "runtime",
   );
+  const external = requireUniqueStrings(runtime.external, "runtime.external", SAFE_NODE_BUILTIN);
+  if (
+    external.length !== EXPECTED_EXTERNALS.length ||
+    external.some((specifier, index) => specifier !== EXPECTED_EXTERNALS[index])
+  ) {
+    fail("runtime.external must match the complete canonical Node builtin boundary");
+  }
   return Object.freeze({
     destination: requireDestination(runtime.destination, "runtime.destination"),
     entrypointResource: requireIdentifier(runtime.entrypointResource, "runtime.entrypointResource"),
-    external: requireUniqueStrings(runtime.external, "runtime.external", SAFE_NODE_BUILTIN),
+    external,
     packageResource: requireIdentifier(runtime.packageResource, "runtime.packageResource"),
   });
 }
@@ -251,8 +277,17 @@ function parseConfiguration(value: unknown): OpenCodeConfiguration {
   const configuration = requireRecord(value, "configuration");
   requireExactKeys(configuration, ["agents", "copies", "permissions", "runtime"], "configuration");
   const permissions = parsePermissions(configuration.permissions);
-  if (permissions["ys_craft_*"] !== "allow") {
-    fail("permissions must allow the Craft tool family");
+  const expectedPermissionNames = Object.keys(EXPECTED_PERMISSIONS).sort();
+  const permissionNames = Object.keys(permissions).sort();
+  if (
+    permissionNames.length !== expectedPermissionNames.length ||
+    permissionNames.some((name, index) => name !== expectedPermissionNames[index]) ||
+    permissionNames.some(
+      (name) =>
+        permissions[name] !== EXPECTED_PERMISSIONS[name as keyof typeof EXPECTED_PERMISSIONS],
+    )
+  ) {
+    fail("permissions must match the complete fail-closed Craft policy");
   }
   return Object.freeze({
     agents: parseAgents(configuration.agents),
