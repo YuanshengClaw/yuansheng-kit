@@ -35,6 +35,7 @@ export type {
   BlockWorkflowInput,
   CreateBlueprintWorkflowInput,
   CreateProblemWorkflowInput,
+  RebindBlockedWorkflowInput,
   RecordPhaseArtifactInput,
   ReturnWorkflowInput,
   TransitionWorkflowInput,
@@ -47,6 +48,7 @@ export {
   blockWorkflow,
   createBlueprintWorkflowState,
   createProblemWorkflowState,
+  rebindBlockedWorkflowCoordinator,
   recordPhaseArtifact,
   remediateBlockedWorkflow,
   returnWorkflowToPhase,
@@ -75,6 +77,30 @@ export {
 } from "../../workflows/state-machine/principal";
 export type { StopGateResult } from "../../workflows/state-machine/stop-gate";
 export { evaluateStopGate } from "../../workflows/state-machine/stop-gate";
+export type {
+  CommitWorkflowInput,
+  InitializeWorkflowInput,
+  OperationIntentRecord,
+  OperationResultRecord,
+  OperationStartedRecord,
+  RecordOperationIntentInput,
+  RecordOperationResultInput,
+  ResumeCheckCode,
+  ResumeCheckIssue,
+  ResumeExactWorkflowInput,
+  ResumeRepositoryObservation,
+  ResumeWorkflowResult,
+  SideEffectKind,
+  StoreResidue,
+  WorkflowSnapshot,
+  WorkflowStoreErrorCode,
+} from "../../workflows/store";
+export {
+  AtomicWorkflowStore,
+  openAtomicWorkflowStore,
+  StorePathError,
+  WorkflowStoreError,
+} from "../../workflows/store";
 
 const TOOL_DESCRIPTIONS = Object.freeze(
   Object.fromEntries(

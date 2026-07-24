@@ -152,6 +152,54 @@ export default {
         "craft-state-machine-principal",
       ],
     },
+    "craft-store-filesystem": {
+      kind: "workflow",
+      logicalPath: "workflows/store/filesystem.ts",
+      source: {
+        kind: "file",
+        path: "plugins/craft/workflows/store/filesystem.ts",
+      },
+    },
+    "craft-store-index": {
+      kind: "workflow",
+      logicalPath: "workflows/store/index.ts",
+      source: {
+        kind: "file",
+        path: "plugins/craft/workflows/store/index.ts",
+      },
+      requires: ["craft-store-runtime", "craft-store-records"],
+    },
+    "craft-store-records": {
+      kind: "workflow",
+      logicalPath: "workflows/store/records.ts",
+      source: {
+        kind: "file",
+        path: "plugins/craft/workflows/store/records.ts",
+      },
+      requires: [
+        "craft-contract-canonical",
+        "craft-contract-generated-index",
+        "craft-contract-strict-json",
+      ],
+    },
+    "craft-store-runtime": {
+      kind: "workflow",
+      logicalPath: "workflows/store/atomic-store.ts",
+      source: {
+        kind: "file",
+        path: "plugins/craft/workflows/store/atomic-store.ts",
+      },
+      requires: [
+        "craft-contract-canonical",
+        "craft-contract-generated-index",
+        "craft-contract-parser",
+        "craft-contract-strict-json",
+        "craft-state-machine-engine",
+        "craft-state-machine-principal",
+        "craft-store-filesystem",
+        "craft-store-records",
+      ],
+    },
     "craft-blueprint-import-transaction": {
       kind: "workflow",
       logicalPath: "workflows/blueprint-import/transaction.ts",
@@ -242,6 +290,7 @@ export default {
         "craft-state-machine-phases",
         "craft-state-machine-principal",
         "craft-state-machine-stop-gate",
+        "craft-store-index",
         "craft-tool-surface",
       ],
     },
@@ -314,7 +363,7 @@ export default {
         runtime: {
           destination: ".opencode/plugins/ys-craft.js",
           entrypointResource: "opencode-runtime-entry",
-          external: ["node:crypto", "node:fs/promises", "node:path"],
+          external: ["node:crypto", "node:fs", "node:fs/promises", "node:path"],
           packageResource: "opencode-package",
         },
       } satisfies OpenCodeConfiguration,

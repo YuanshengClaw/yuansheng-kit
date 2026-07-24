@@ -92,6 +92,13 @@ export interface ReturnWorkflowInput extends StateUpdateInput {
   readonly targetPhase: ActiveWorkflowPhase;
 }
 
+export interface RebindBlockedWorkflowInput {
+  readonly at: string;
+  readonly expectedRevision: number;
+  readonly principal: TrustedPrincipal;
+  readonly state: WorkflowState;
+}
+
 type RollbackPhase = RemediationPhase | "reviewing";
 
 function fail(code: WorkflowGuardCode, message: string): never {
@@ -858,6 +865,22 @@ export function remediateBlockedWorkflow(input: StateUpdateInput): WorkflowState
     phase: target,
     principalAudit: appendAudit(input.state.principal_audit, principal),
     staleRefs: invalidated.stale,
+  });
+}
+
+export function rebindBlockedWorkflowCoordinator(input: RebindBlockedWorkflowInput): WorkflowState {
+  assertRevision(input.state, input.expectedRevision, input.at);
+  if (input.state.phase !== "blocked" || input.state.blocked_context === null) {
+    return fail("INVALID_TRANSITION", "Explicit resume can only rebind a blocked workflow");
+  }
+  const principal = assertCoordinator(input.principal);
+  const { artifact_digest: _artifactDigest, ...statePayload } = input.state;
+  return sealState({
+    ...statePayload,
+    coordinator: principal,
+    principal_audit: appendAudit(input.state.principal_audit, principal),
+    revision: input.state.revision + 1,
+    updated_at: input.at,
   });
 }
 
