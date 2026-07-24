@@ -10,6 +10,11 @@ import {
   type ParsedCraftRuntimeConfig,
   parseCraftRuntimeConfigBytes,
 } from "../../workflows/runtime-config/config";
+import type {
+  LocalProcessResult,
+  LocalProcessRunner,
+  VerificationLogSink,
+} from "../../workflows/verification/local-verification";
 
 const CONFIG_RELATIVE_PATH = ".opencode/yuansheng/craft.json";
 const STATE_RELATIVE_PATH = ".opencode/yuansheng/workflow";
@@ -272,6 +277,109 @@ export function createOpenCodeBinaryGitRunner(): BinaryGitRunner {
         if (child.exitCode === null) {
           child.kill();
         }
+      }
+    },
+  });
+}
+
+export function createOpenCodeLocalProcessRunner(): LocalProcessRunner {
+  return Object.freeze({
+    async run(input: Parameters<LocalProcessRunner["run"]>[0]): Promise<LocalProcessResult> {
+      try {
+        const child = Bun.spawn([...input.argv], {
+          cwd: input.cwdRealpath,
+          env: { ...input.environment },
+          stderr: "pipe",
+          stdin: "ignore",
+          stdout: "pipe",
+        });
+        let timedOut = false;
+        const timer = setTimeout(() => {
+          timedOut = true;
+          child.kill();
+        }, input.timeoutMs);
+        try {
+          const abort = () => child.kill();
+          let collected: readonly [number, Uint8Array, Uint8Array] | undefined;
+          try {
+            collected = await Promise.all([
+              child.exited,
+              readLimitedBytes(child.stdout, MAX_GIT_OUTPUT_BYTES, abort),
+              readLimitedBytes(child.stderr, MAX_GIT_OUTPUT_BYTES, abort),
+            ]);
+          } catch {
+            return {
+              error: timedOut ? "timeout" : "spawn_failure",
+              kind: "infra_error",
+              stderr: new Uint8Array(),
+              stdout: new Uint8Array(),
+            };
+          }
+          const [exitCode, stdout, stderr] = collected;
+          if (timedOut) {
+            return {
+              error: "timeout",
+              kind: "infra_error",
+              stderr,
+              stdout,
+            };
+          }
+          if (!Number.isInteger(exitCode) || exitCode < 0 || exitCode > 255) {
+            return {
+              error: "spawn_failure",
+              kind: "infra_error",
+              stderr,
+              stdout,
+            };
+          }
+          return {
+            exitCode,
+            kind: "exited",
+            outputArtifactDigests: [],
+            stderr,
+            stdout,
+          };
+        } finally {
+          clearTimeout(timer);
+          if (child.exitCode === null) {
+            child.kill();
+          }
+        }
+      } catch {
+        return {
+          error: "spawn_failure",
+          kind: "infra_error",
+          stderr: new Uint8Array(),
+          stdout: new Uint8Array(),
+        };
+      }
+    },
+  });
+}
+
+export function createOpenCodeVerificationLogSink(): VerificationLogSink {
+  return Object.freeze({
+    async write(input: Parameters<VerificationLogSink["write"]>[0]): Promise<void> {
+      const parentPath = dirname(input.logRealpath);
+      const parentRealpath = await realpath(parentPath);
+      const parentStats = await lstat(parentPath);
+      if (
+        parentRealpath !== parentPath ||
+        parentStats.isSymbolicLink() ||
+        !parentStats.isDirectory()
+      ) {
+        throw new TypeError("Verification log parent must be a canonical non-symlink directory");
+      }
+      const handle = await open(
+        input.logRealpath,
+        constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW | constants.O_WRONLY,
+        0o600,
+      );
+      try {
+        await handle.writeFile(input.bytes);
+        await handle.sync();
+      } finally {
+        await handle.close();
       }
     },
   });

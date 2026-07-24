@@ -158,12 +158,32 @@ export {
   StorePathError,
   WorkflowStoreError,
 } from "../../workflows/store";
+export type {
+  CandidateDiffObserver,
+  HumanCriterionDecision,
+  LocalProcessResult,
+  LocalProcessRunner,
+  LocalVerificationRun,
+  PreparedVerification,
+  VerificationApproval,
+  VerificationClock,
+  VerificationLogSink,
+  VerificationSourceProposal,
+} from "../../workflows/verification/local-verification";
+export {
+  approveVerification,
+  LocalVerificationError,
+  prepareVerification,
+  runLocalVerification,
+} from "../../workflows/verification/local-verification";
 export type { OpenCodeBuilderWriteGuard } from "./builder-write-guard";
 export { createOpenCodeBuilderWriteGuard } from "./builder-write-guard";
 export type { OpenCodeCraftController } from "./controller-runtime";
 export {
   createOpenCodeBinaryGitRunner,
   createOpenCodeGitRunner,
+  createOpenCodeLocalProcessRunner,
+  createOpenCodeVerificationLogSink,
   loadOpenCodeCraftController,
 } from "./controller-runtime";
 

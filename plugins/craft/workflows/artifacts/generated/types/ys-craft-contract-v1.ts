@@ -180,24 +180,27 @@ export type PatchCandidate = ArtifactBase &
 export type VerificationSource = ArtifactBase &
   WorkflowArtifactBase & {
     artifact_type: "verification-source";
-    /**
-     * @minItems 1
-     */
-    commands: [VerificationCommand, ...VerificationCommand[]];
+    commands: VerificationCommand[];
+    config_digest: Digest;
+    human_criterion_ids: OpaqueId[];
     plan_ref: ArtifactRef;
     repository_binding_ref: ArtifactRef;
-    runner_id: OpaqueId;
-    runner_type: "local" | "ssh";
+    source_type: "official" | "user-provided";
   };
+export type RuntimeIdentifier = string;
 export type VerificationManifest = ArtifactBase &
   WorkflowArtifactBase & {
     artifact_type: "verification-manifest";
+    baseline_commit: string;
     candidate_ref: ArtifactRef;
-    /**
-     * @minItems 1
-     */
-    commands: [VerificationCommand, ...VerificationCommand[]];
+    commands: VerificationCommand[];
+    config_digest: Digest;
+    diff_content_digest: Digest;
+    human_criterion_ids: OpaqueId[];
+    log_root_realpath: Realpath;
+    repository_binding_ref: ArtifactRef;
     source_ref: ArtifactRef;
+    target_worktree_realpath: Realpath;
   };
 export type VerificationAuthorization = ArtifactBase &
   WorkflowArtifactBase & {
@@ -232,15 +235,14 @@ export type CriterionEvidence = ArtifactBase &
     artifact_type: "criterion-evidence";
     candidate_ref: ArtifactRef;
     criterion_id: OpaqueId;
+    command_results: VerificationCommandResult[];
+    evidence_kind: "human" | "machine";
     finished_at: UtcTime;
-    /**
-     * @minItems 1
-     */
-    log_digests: [Digest, ...Digest[]];
+    human_confirmation: HumanCriterionConfirmation | null;
     manifest_ref: ArtifactRef;
-    runner_id: OpaqueId;
+    observed_diff_content_digest: Digest;
     started_at: UtcTime;
-    status: "blocked" | "fail" | "pass";
+    status: "blocked" | "fail" | "infra_error" | "pass";
   };
 export type PatchReview = ArtifactBase &
   WorkflowArtifactBase & {
@@ -444,12 +446,13 @@ export interface VerificationCommand {
    */
   argv: [NonEmptyString, ...NonEmptyString[]];
   command_id: OpaqueId;
-  /**
-   * @minItems 1
-   */
-  criterion_ids: [OpaqueId, ...OpaqueId[]];
-  cwd: RelativePath;
+  criterion_id: OpaqueId;
+  cwd: NonEmptyString;
+  environment_allowlist: string[];
+  log_path: RelativePath;
   required: boolean;
+  runner_id: RuntimeIdentifier;
+  runner_type: "local" | "ssh";
   timeout_seconds: number;
 }
 export interface PhaseCommand {
@@ -461,6 +464,24 @@ export interface PhaseCommand {
   cwd: RelativePath;
   environment_allowlist: string[];
   timeout_seconds: number;
+}
+export interface VerificationCommandResult {
+  command_id: OpaqueId;
+  exit_code: number | null;
+  finished_at: UtcTime;
+  infra_error: ("cancelled" | "log_write_failure" | "spawn_failure" | "timeout") | null;
+  log_digest: Digest;
+  log_persisted: boolean;
+  output_artifact_digests: Digest[];
+  started_at: UtcTime;
+  status: "fail" | "infra_error" | "pass";
+  stderr_digest: Digest;
+  stdout_digest: Digest;
+}
+export interface HumanCriterionConfirmation {
+  action: "allow" | "deny";
+  confirmation_digest: Digest;
+  session_id: OpaqueId;
 }
 export interface ReviewFinding {
   finding_id: OpaqueId;

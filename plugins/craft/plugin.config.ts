@@ -122,6 +122,22 @@ export default {
         "craft-state-machine-principal",
       ],
     },
+    "craft-local-verification": {
+      kind: "workflow",
+      logicalPath: "workflows/verification/local-verification.ts",
+      source: {
+        kind: "file",
+        path: "plugins/craft/workflows/verification/local-verification.ts",
+      },
+      requires: [
+        "craft-contract-canonical",
+        "craft-contract-generated-index",
+        "craft-contract-parser",
+        "craft-contract-strict-json",
+        "craft-runtime-config",
+        "craft-state-machine-principal",
+      ],
+    },
     "craft-repository-preflight": {
       kind: "workflow",
       logicalPath: "workflows/repository-preflight/preflight.ts",
@@ -393,7 +409,12 @@ export default {
         kind: "file",
         path: "plugins/craft/opencode/src/controller-runtime.ts",
       },
-      requires: ["craft-candidate-capture", "craft-repository-preflight", "craft-runtime-config"],
+      requires: [
+        "craft-candidate-capture",
+        "craft-local-verification",
+        "craft-repository-preflight",
+        "craft-runtime-config",
+      ],
     },
     "opencode-builder-write-guard": {
       kind: "platform-runtime",
@@ -442,6 +463,7 @@ export default {
         "craft-blueprint-import-verifier",
         "craft-candidate-capture",
         "craft-contract-parser",
+        "craft-local-verification",
         "craft-plan-authorization",
         "craft-repository-preflight",
         "craft-runtime-config",

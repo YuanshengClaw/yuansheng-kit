@@ -8,6 +8,7 @@ import {
   type CriterionEvidence,
   type PatchCandidate,
   type RootCauseArtifact,
+  type VerificationCommand,
   validateYuanshengCraftContractV1,
   type YuanshengCraftContractV1,
 } from "./generated";
@@ -111,13 +112,18 @@ function inspectPaths(value: unknown): void {
   for (const [key, field] of Object.entries(value)) {
     if (typeof field === "string" && key.endsWith("_realpath")) {
       assertCanonicalPath(field, true);
-    } else if (
-      typeof field === "string" &&
-      (key === "cwd" || key === "path" || key === "source_path")
-    ) {
+    } else if (typeof field === "string" && (key === "path" || key === "source_path")) {
       assertCanonicalPath(field, false);
     }
     inspectPaths(field);
+  }
+}
+
+function assertVerificationCommand(command: VerificationCommand): void {
+  assertCanonicalPath(command.cwd, command.runner_type === "ssh");
+  assertCanonicalPath(command.log_path, false);
+  if (command.argv.some((argument) => argument.includes("\0"))) {
+    fail("semantic-invalid", `Verification command ${command.command_id} contains NUL argv`);
   }
 }
 
@@ -315,14 +321,29 @@ function assertContractSemantics(contract: YuanshengCraftContractV1): void {
         contract.commands.map((command) => command.command_id),
         "verification command ID",
       );
+      assertUnique(
+        contract.commands.map((command) => command.log_path),
+        "verification command log path",
+      );
+      for (const command of contract.commands) {
+        assertVerificationCommand(command);
+      }
       break;
     case "verification-manifest":
       assertRefType(contract.candidate_ref, "patch-candidate");
+      assertRefType(contract.repository_binding_ref, "repository-binding");
       assertRefType(contract.source_ref, "verification-source");
       assertUnique(
         contract.commands.map((command) => command.command_id),
         "verification command ID",
       );
+      assertUnique(
+        contract.commands.map((command) => command.log_path),
+        "verification command log path",
+      );
+      for (const command of contract.commands) {
+        assertVerificationCommand(command);
+      }
       break;
     case "verification-authorization":
       assertRefType(contract.candidate_ref, "patch-candidate");
@@ -334,6 +355,9 @@ function assertContractSemantics(contract: YuanshengCraftContractV1): void {
         contract.commands.map((command) => command.command_id),
         "phase command ID",
       );
+      for (const command of contract.commands) {
+        assertCanonicalPath(command.cwd, false);
+      }
       break;
     case "phase-command-authorization":
       assertRefType(contract.manifest_ref, "phase-command-manifest");
@@ -343,6 +367,44 @@ function assertContractSemantics(contract: YuanshengCraftContractV1): void {
       assertRefType(contract.manifest_ref, "verification-manifest");
       if (Date.parse(contract.finished_at) < Date.parse(contract.started_at)) {
         fail("semantic-invalid", "Criterion evidence cannot finish before it starts");
+      }
+      assertUnique(
+        contract.command_results.map((result) => result.command_id),
+        "verification command result ID",
+      );
+      for (const result of contract.command_results) {
+        if (
+          Date.parse(result.finished_at) < Date.parse(result.started_at) ||
+          Date.parse(result.started_at) < Date.parse(contract.started_at) ||
+          Date.parse(result.finished_at) > Date.parse(contract.finished_at)
+        ) {
+          fail("semantic-invalid", "Command result timestamps escape criterion evidence");
+        }
+        const invalidExit =
+          (result.status === "pass" && result.exit_code !== 0) ||
+          (result.status === "fail" && (result.exit_code === null || result.exit_code === 0)) ||
+          (result.status === "infra_error") !== (result.infra_error !== null) ||
+          (result.infra_error === "log_write_failure" && result.log_persisted);
+        if (invalidExit) {
+          fail("semantic-invalid", "Command result status and exit code disagree");
+        }
+      }
+      if (
+        (contract.evidence_kind === "machine" &&
+          (contract.command_results.length === 0 || contract.human_confirmation !== null)) ||
+        (contract.evidence_kind === "human" &&
+          (contract.command_results.length !== 0 || contract.human_confirmation === null))
+      ) {
+        fail("semantic-invalid", "Criterion evidence kind does not match its payload");
+      }
+      if (
+        contract.evidence_kind === "human" &&
+        contract.human_confirmation !== null &&
+        ((contract.status === "pass" && contract.human_confirmation.action !== "allow") ||
+          (contract.status === "fail" && contract.human_confirmation.action !== "deny") ||
+          contract.status === "infra_error")
+      ) {
+        fail("semantic-invalid", "Human confirmation action does not match evidence status");
       }
       break;
     case "patch-review":
@@ -622,6 +684,13 @@ function assertPlanGraph(
       fail("reference-mismatch", `Patch plan references unknown criterion ${criterionId}`);
     }
   }
+  if (
+    rootCause.criteria.some(
+      (criterion) => criterion.required && !contract.criterion_ids.includes(criterion.id),
+    )
+  ) {
+    fail("reference-mismatch", "Patch plan must retain every required root-cause criterion");
+  }
   for (const change of contract.changes) {
     for (const criterionId of change.criterion_ids) {
       if (!criterionIds.has(criterionId) || !contract.criterion_ids.includes(criterionId)) {
@@ -690,14 +759,39 @@ function assertSourceGraph(
 ): void {
   const plan = getContract(index, contract.plan_ref, "patch-plan");
   const criterionIds = new Set(plan.criterion_ids);
+  const machineCriterionIds = new Set<string>();
   for (const command of contract.commands) {
-    for (const criterionId of command.criterion_ids) {
-      if (!criterionIds.has(criterionId)) {
-        fail(
-          "reference-mismatch",
-          `Verification source references unknown criterion ${criterionId}`,
-        );
-      }
+    if (!criterionIds.has(command.criterion_id)) {
+      fail(
+        "reference-mismatch",
+        `Verification source references unknown criterion ${command.criterion_id}`,
+      );
+    }
+    machineCriterionIds.add(command.criterion_id);
+  }
+  const humanCriterionIds = new Set(contract.human_criterion_ids);
+  if (
+    contract.human_criterion_ids.some(
+      (criterionId) => !criterionIds.has(criterionId) || machineCriterionIds.has(criterionId),
+    )
+  ) {
+    fail(
+      "reference-mismatch",
+      "Human verification criteria must be known and distinct from machine criteria",
+    );
+  }
+  if (
+    [...criterionIds].some(
+      (criterionId) => !machineCriterionIds.has(criterionId) && !humanCriterionIds.has(criterionId),
+    )
+  ) {
+    fail("reference-mismatch", "Verification source must classify every plan criterion");
+  }
+  for (const criterionId of machineCriterionIds) {
+    if (
+      !contract.commands.some((command) => command.criterion_id === criterionId && command.required)
+    ) {
+      fail("semantic-invalid", `Machine criterion has no required check: ${criterionId}`);
     }
   }
 }
@@ -707,14 +801,62 @@ function assertEvidenceGraph(
   index: ReadonlyMap<string, YuanshengCraftContractV1>,
 ): void {
   const manifest = getContract(index, evidence.manifest_ref, "verification-manifest");
-  const commandCriterionIds = new Set(
-    manifest.commands.flatMap((command) => command.criterion_ids),
+  const commands = manifest.commands.filter(
+    (command) => command.criterion_id === evidence.criterion_id,
   );
-  if (!commandCriterionIds.has(evidence.criterion_id)) {
-    fail("reference-mismatch", "Criterion evidence is not selected by its manifest");
+  const isHuman = manifest.human_criterion_ids.includes(evidence.criterion_id);
+  if (
+    (evidence.evidence_kind === "machine" && commands.length === 0) ||
+    (evidence.evidence_kind === "human" && !isHuman)
+  ) {
+    fail("reference-mismatch", "Criterion evidence kind is not selected by its manifest");
   }
   if (manifest.candidate_ref.digest !== evidence.candidate_ref.digest) {
     fail("reference-mismatch", "Criterion evidence and manifest bind different candidates");
+  }
+  if (
+    evidence.status === "blocked"
+      ? evidence.observed_diff_content_digest === manifest.diff_content_digest
+      : evidence.observed_diff_content_digest !== manifest.diff_content_digest
+  ) {
+    fail(
+      "reference-mismatch",
+      "Criterion evidence drift status does not match its observed candidate diff",
+    );
+  }
+  if (evidence.evidence_kind === "machine") {
+    const expectedResults = commands.map((command) => command.command_id).sort();
+    const actualResults = evidence.command_results.map((result) => result.command_id).sort();
+    if (
+      evidence.status !== "blocked" &&
+      (expectedResults.length !== actualResults.length ||
+        expectedResults.some((commandId, resultIndex) => commandId !== actualResults[resultIndex]))
+    ) {
+      fail("reference-mismatch", "Machine evidence must record every selected command");
+    }
+    const requiredStatuses = commands
+      .filter((command) => command.required)
+      .map((command) =>
+        evidence.command_results.find((result) => result.command_id === command.command_id),
+      );
+    if (
+      evidence.status === "pass" &&
+      requiredStatuses.some((result) => result?.status !== "pass")
+    ) {
+      fail("semantic-invalid", "Passing criterion evidence requires every required check to pass");
+    }
+    if (
+      evidence.status === "infra_error" &&
+      !requiredStatuses.some((result) => result?.status === "infra_error")
+    ) {
+      fail("semantic-invalid", "Infrastructure evidence requires an infrastructure error result");
+    }
+    if (
+      evidence.status === "fail" &&
+      !requiredStatuses.some((result) => result?.status === "fail")
+    ) {
+      fail("semantic-invalid", "Failing criterion evidence requires a failed required check");
+    }
   }
 }
 
@@ -778,12 +920,45 @@ export function validateCraftContractGraph(
     } else if (contract.artifact_type === "verification-manifest") {
       const candidate = getContract(index, contract.candidate_ref, "patch-candidate");
       const source = getContract(index, contract.source_ref, "verification-source");
+      const binding = getContract(index, contract.repository_binding_ref, "repository-binding");
       const plan = getContract(index, candidate.plan_ref, "patch-plan");
-      if (source.plan_ref.digest !== plan.artifact_digest) {
+      if (
+        source.plan_ref.digest !== plan.artifact_digest ||
+        source.repository_binding_ref.digest !== binding.artifact_digest
+      ) {
         fail("reference-mismatch", "Verification source does not bind the candidate plan");
       }
-      if (canonicalizeJson(source.commands).text !== canonicalizeJson(contract.commands).text) {
+      if (
+        canonicalizeJson(source.commands).text !== canonicalizeJson(contract.commands).text ||
+        canonicalizeJson(source.human_criterion_ids).text !==
+          canonicalizeJson(contract.human_criterion_ids).text ||
+        source.config_digest !== contract.config_digest
+      ) {
         fail("reference-mismatch", "Verification manifest must preserve the selected source");
+      }
+      if (
+        contract.diff_content_digest !== candidate.diff_content_digest ||
+        contract.baseline_commit !== binding.commit_sha ||
+        contract.target_worktree_realpath !== binding.target_worktree_realpath ||
+        contract.log_root_realpath === binding.target_worktree_realpath ||
+        contract.log_root_realpath.startsWith(`${binding.target_worktree_realpath}/`)
+      ) {
+        fail(
+          "reference-mismatch",
+          "Verification manifest preflight or log root does not match its candidate binding",
+        );
+      }
+    } else if (contract.artifact_type === "verification-authorization") {
+      const manifest = getContract(index, contract.manifest_ref, "verification-manifest");
+      const candidate = getContract(index, contract.candidate_ref, "patch-candidate");
+      if (
+        manifest.candidate_ref.digest !== candidate.artifact_digest ||
+        contract.principal.agent_id !== "ys-craft-regression-verifier"
+      ) {
+        fail(
+          "reference-mismatch",
+          "Verification authorization must bind the exact manifest candidate and verifier",
+        );
       }
     } else if (contract.artifact_type === "patch-review" && contract.status === "pass") {
       const candidate = getContract(index, contract.candidate_ref, "patch-candidate");
@@ -885,6 +1060,27 @@ export function validateCraftContractGraph(
           "Patch candidate revision and iteration must both increase strictly for one plan",
         );
       }
+    }
+  }
+  const manifestedCandidates = new Set<string>();
+  const authorizedManifests = new Set<string>();
+  for (const contract of contracts) {
+    if (contract.artifact_type === "verification-manifest") {
+      if (manifestedCandidates.has(contract.candidate_ref.digest)) {
+        fail(
+          "semantic-invalid",
+          "One immutable candidate revision cannot have multiple verification manifests",
+        );
+      }
+      manifestedCandidates.add(contract.candidate_ref.digest);
+    } else if (contract.artifact_type === "verification-authorization") {
+      if (authorizedManifests.has(contract.manifest_ref.digest)) {
+        fail(
+          "semantic-invalid",
+          "One immutable verification manifest cannot have multiple authorizations",
+        );
+      }
+      authorizedManifests.add(contract.manifest_ref.digest);
     }
   }
   return index;
