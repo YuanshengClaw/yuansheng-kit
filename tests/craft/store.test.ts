@@ -29,6 +29,7 @@ import { makeCompleteContractGraph, makeRepositoryBinding } from "./contract-fix
 
 const CREATED_AT = "2026-07-24T08:00:00.000Z";
 const CONFIG_DIGEST = sha256Digest(new TextEncoder().encode("craft config v1"));
+const CONTROLLER_ROOT = "/workspace/controller";
 const COORDINATOR_AUDIT: PrincipalAudit = {
   agent_id: "ys-craft",
   session_id: "session:STOREPRIMARY0001",
@@ -158,6 +159,7 @@ function observation(
 ): ResumeRepositoryObservation {
   return {
     configDigest: CONFIG_DIGEST,
+    controllerRootRealpath: CONTROLLER_ROOT,
     diffContentDigest: null,
     gitRootRealpath: binding.git_root_realpath,
     headCommit: binding.commit_sha,
@@ -187,6 +189,7 @@ async function makeStoreHarness(
   await store.initializeWorkflow({
     artifacts: [binding],
     configDigest: CONFIG_DIGEST,
+    controllerRootRealpath: CONTROLLER_ROOT,
     journal,
     state,
   });
@@ -201,6 +204,7 @@ describe("Yuansheng Craft atomic workflow Store", () => {
       harness.store.initializeWorkflow({
         artifacts: [harness.binding],
         configDigest: CONFIG_DIGEST,
+        controllerRootRealpath: CONTROLLER_ROOT,
         journal: harness.journal,
         state: harness.state,
       }),
@@ -274,6 +278,7 @@ describe("Yuansheng Craft atomic workflow Store", () => {
       first.store.initializeWorkflow({
         artifacts: [first.binding],
         configDigest: CONFIG_DIGEST,
+        controllerRootRealpath: CONTROLLER_ROOT,
         journal: sealJournal(secondState),
         state: secondState,
       }),
@@ -292,6 +297,7 @@ describe("Yuansheng Craft atomic workflow Store", () => {
       first.store.initializeWorkflow({
         artifacts: [otherBinding],
         configDigest: CONFIG_DIGEST,
+        controllerRootRealpath: CONTROLLER_ROOT,
         journal: sealJournal(parallelState),
         state: parallelState,
       }),
@@ -454,6 +460,7 @@ describe("Yuansheng Craft atomic workflow Store", () => {
     await first.store.initializeWorkflow({
       artifacts: [first.binding],
       configDigest: CONFIG_DIGEST,
+      controllerRootRealpath: CONTROLLER_ROOT,
       journal: sealJournal(secondState),
       state: secondState,
     });
@@ -480,6 +487,19 @@ describe("Yuansheng Craft atomic workflow Store", () => {
     expect(drifted.status).toBe("blocked");
     if (drifted.status === "blocked") {
       expect(drifted.issues.map((issue) => issue.code)).toContain("CONFIG_DRIFT");
+    }
+    const controllerDrifted = await first.store.resumeExactWorkflow({
+      at: "2026-07-24T08:03:00.000Z",
+      observation: observation(first.root, first.binding, {
+        controllerRootRealpath: "/workspace/other-controller",
+      }),
+      principal: RESUMED_COORDINATOR,
+      storeAnchor: first.root,
+      workflowId: secondState.workflow_id,
+    });
+    expect(controllerDrifted.status).toBe("blocked");
+    if (controllerDrifted.status === "blocked") {
+      expect(controllerDrifted.issues.map((issue) => issue.code)).toContain("CONFIG_DRIFT");
     }
     expect((await first.store.readExactWorkflow(first.workflowId)).state.revision).toBe(0);
     expect((await first.store.readExactWorkflow(secondState.workflow_id)).state.revision).toBe(0);
@@ -527,6 +547,7 @@ describe("Yuansheng Craft atomic workflow Store", () => {
     await store.initializeWorkflow({
       artifacts,
       configDigest: CONFIG_DIGEST,
+      controllerRootRealpath: CONTROLLER_ROOT,
       journal: sealJournal(state),
       state,
     });

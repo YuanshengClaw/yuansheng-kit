@@ -79,6 +79,36 @@ export default {
         path: "plugins/craft/workflows/entry-strategies/catalog.ts",
       },
     },
+    "craft-repository-preflight": {
+      kind: "workflow",
+      logicalPath: "workflows/repository-preflight/preflight.ts",
+      source: {
+        kind: "file",
+        path: "plugins/craft/workflows/repository-preflight/preflight.ts",
+      },
+      requires: ["craft-contract-canonical", "craft-contract-parser", "craft-runtime-config"],
+    },
+    "craft-runtime-config": {
+      kind: "workflow",
+      logicalPath: "workflows/runtime-config/config.ts",
+      source: {
+        kind: "file",
+        path: "plugins/craft/workflows/runtime-config/config.ts",
+      },
+      requires: [
+        "craft-contract-canonical",
+        "craft-contract-strict-json",
+        "craft-runtime-config-schema",
+      ],
+    },
+    "craft-runtime-config-schema": {
+      kind: "workflow-schema",
+      logicalPath: "workflows/runtime-config/ys-craft-runtime-config-v1.schema.json",
+      source: {
+        kind: "file",
+        path: "plugins/craft/workflows/runtime-config/ys-craft-runtime-config-v1.schema.json",
+      },
+    },
     "craft-contract-canonical": {
       kind: "workflow",
       logicalPath: "workflows/artifacts/canonical.ts",
@@ -313,6 +343,15 @@ export default {
         path: "plugins/craft/opencode/package.json",
       },
     },
+    "opencode-controller-runtime": {
+      kind: "platform-runtime",
+      logicalPath: "opencode/src/controller-runtime.ts",
+      source: {
+        kind: "file",
+        path: "plugins/craft/opencode/src/controller-runtime.ts",
+      },
+      requires: ["craft-repository-preflight", "craft-runtime-config"],
+    },
     "opencode-platform-handler": {
       kind: "platform-handler",
       logicalPath: "opencode/src/platform-handler.ts",
@@ -346,6 +385,8 @@ export default {
         "craft-blueprint-import-transaction",
         "craft-blueprint-import-verifier",
         "craft-contract-parser",
+        "craft-repository-preflight",
+        "craft-runtime-config",
         "craft-state-machine-engine",
         "craft-state-machine-phase-commands",
         "craft-state-machine-phases",
@@ -353,6 +394,7 @@ export default {
         "craft-state-machine-stop-gate",
         "craft-store-index",
         "craft-tool-surface",
+        "opencode-controller-runtime",
       ],
     },
     "root-cause-blueprint-type": {

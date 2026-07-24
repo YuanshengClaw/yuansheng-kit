@@ -19,6 +19,7 @@ export interface StoreIdentityRecord {
 
 export interface WorkflowIdentityRecord {
   readonly config_digest: `sha256:${string}`;
+  readonly controller_root_realpath: string;
   readonly format_version: 1;
   readonly kind: "workflow-identity";
   readonly target_worktree_realpath: string;
@@ -105,6 +106,7 @@ export interface OperationResultRecord {
 
 export interface ResumeRepositoryObservation {
   readonly configDigest: `sha256:${string}`;
+  readonly controllerRootRealpath: string;
   readonly diffContentDigest: `sha256:${string}` | null;
   readonly gitRootRealpath: string;
   readonly headCommit: string;
@@ -218,6 +220,7 @@ export function parseStoreIdentity(bytes: Uint8Array): StoreIdentityRecord {
 export function parseWorkflowIdentity(bytes: Uint8Array): WorkflowIdentityRecord {
   const value = parseRecord(bytes, [
     "config_digest",
+    "controller_root_realpath",
     "format_version",
     "kind",
     "target_worktree_realpath",
@@ -226,6 +229,7 @@ export function parseWorkflowIdentity(bytes: Uint8Array): WorkflowIdentityRecord
   assertLiteral(value.format_version, 1, "workflow identity format version");
   assertLiteral(value.kind, "workflow-identity", "workflow identity kind");
   assertDigest(value.config_digest, "workflow config digest");
+  assertRealpath(value.controller_root_realpath, "workflow controller root");
   assertRealpath(value.target_worktree_realpath, "workflow target worktree");
   assertOpaqueId(value.workflow_id, "workflow ID");
   return value as unknown as WorkflowIdentityRecord;
@@ -390,6 +394,7 @@ export function assertObservation(
   observation: ResumeRepositoryObservation,
 ): ResumeRepositoryObservation {
   assertDigest(observation.configDigest, "observed config digest");
+  assertRealpath(observation.controllerRootRealpath, "observed controller root");
   if (observation.diffContentDigest !== null) {
     assertDigest(observation.diffContentDigest, "observed diff digest");
   }

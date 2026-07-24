@@ -1,0 +1,143 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://yuansheng-kit.invalid/craft/runtime-config/v1",
+  "title": "Yuansheng Craft Runtime Config v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["repository", "verification", "version"],
+  "properties": {
+    "repository": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["preparation_policy", "timeout_ms"],
+      "properties": {
+        "preparation_policy": {
+          "enum": ["manual-only", "manual-or-managed"]
+        },
+        "timeout_ms": {
+          "type": "integer",
+          "minimum": 1000,
+          "maximum": 3600000
+        }
+      }
+    },
+    "verification": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["runners"],
+      "properties": {
+        "max_iterations": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 50,
+          "default": 5
+        },
+        "runners": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "oneOf": [
+              {
+                "$ref": "#/$defs/local_runner"
+              },
+              {
+                "$ref": "#/$defs/ssh_runner"
+              }
+            ]
+          }
+        }
+      }
+    },
+    "version": {
+      "const": 1
+    }
+  },
+  "$defs": {
+    "argv": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "command_proposal": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["argv", "id"],
+      "properties": {
+        "argv": {
+          "$ref": "#/$defs/argv"
+        },
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$"
+        }
+      }
+    },
+    "local_runner": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["command_proposals", "cwd", "id", "timeout_ms", "type"],
+      "properties": {
+        "command_proposals": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/command_proposal"
+          }
+        },
+        "cwd": {
+          "type": "string",
+          "minLength": 1
+        },
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$"
+        },
+        "timeout_ms": {
+          "type": "integer",
+          "minimum": 1000,
+          "maximum": 3600000
+        },
+        "type": {
+          "const": "local"
+        }
+      }
+    },
+    "ssh_runner": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["command_proposals", "host_alias", "id", "remote_cwd", "timeout_ms", "type"],
+      "properties": {
+        "command_proposals": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/command_proposal"
+          }
+        },
+        "host_alias": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
+        },
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$"
+        },
+        "remote_cwd": {
+          "type": "string",
+          "minLength": 1
+        },
+        "timeout_ms": {
+          "type": "integer",
+          "minimum": 1000,
+          "maximum": 3600000
+        },
+        "type": {
+          "const": "ssh"
+        }
+      }
+    }
+  }
+}

@@ -2,6 +2,7 @@ import { isAbsolute } from "node:path";
 import { type Plugin, type ToolDefinition, tool } from "@opencode-ai/plugin";
 
 import { CRAFT_TOOL_SURFACE, type CraftToolId } from "../../workflows/tool-surface";
+import { loadOpenCodeCraftController } from "./controller-runtime";
 
 export type * from "../../workflows/artifacts/generated";
 export {
@@ -31,6 +32,35 @@ export {
   buildBlueprintReviewSubject,
   reviewBlueprintForImport,
 } from "../../workflows/blueprint-import/transaction";
+export type {
+  GitCommandResult,
+  GitRunner,
+  ManagedRepositoryPreparationPlan,
+  ManagedRepositoryPreparationResult,
+  PreWorkflowPathPreview,
+  RepositoryExpectation,
+  RepositoryPreflightReceipt,
+  RepositoryPreparationAuthorization,
+  RepositoryPreparationMode,
+} from "../../workflows/repository-preflight/preflight";
+export {
+  buildManagedRepositoryPreparationPlan,
+  executeManagedRepositoryPreparation,
+  prepareRepositoryPreflight,
+  RepositoryPreflightError,
+} from "../../workflows/repository-preflight/preflight";
+export type {
+  CommandProposal,
+  CraftRuntimeConfig,
+  LocalVerificationRunner,
+  ParsedCraftRuntimeConfig,
+  SshVerificationRunner,
+  VerificationRunner,
+} from "../../workflows/runtime-config/config";
+export {
+  CraftRuntimeConfigError,
+  parseCraftRuntimeConfigBytes,
+} from "../../workflows/runtime-config/config";
 export type {
   BlockWorkflowInput,
   CreateBlueprintWorkflowInput,
@@ -101,6 +131,11 @@ export {
   StorePathError,
   WorkflowStoreError,
 } from "../../workflows/store";
+export type { OpenCodeCraftController } from "./controller-runtime";
+export {
+  createOpenCodeGitRunner,
+  loadOpenCodeCraftController,
+} from "./controller-runtime";
 
 const TOOL_DESCRIPTIONS = Object.freeze(
   Object.fromEntries(
@@ -262,6 +297,7 @@ if (
   throw new Error("Yuansheng Craft runtime tool registration does not match the frozen surface");
 }
 
-export const YuanshengCraftPlugin: Plugin = async () => ({
-  tool: craftTools,
-});
+export const YuanshengCraftPlugin: Plugin = async ({ directory, worktree }) => {
+  await loadOpenCodeCraftController({ directory, worktree });
+  return { tool: craftTools };
+};

@@ -103,6 +103,7 @@ export class WorkflowStoreError extends Error {
 export interface InitializeWorkflowInput {
   readonly artifacts: readonly StoredArtifact[];
   readonly configDigest: `sha256:${string}`;
+  readonly controllerRootRealpath: string;
   readonly journal: ActionJournal;
   readonly state: WorkflowState;
 }
@@ -253,6 +254,7 @@ export class AtomicWorkflowStore {
     const workflowPath = join(this.layout.workflowsPath, workflowName);
     const identity: WorkflowIdentityRecord = {
       config_digest: input.configDigest,
+      controller_root_realpath: input.controllerRootRealpath,
       format_version: 1,
       kind: "workflow-identity",
       target_worktree_realpath: binding.target_worktree_realpath,
@@ -576,6 +578,15 @@ export class AtomicWorkflowStore {
           "CONFIG_DRIFT",
           "Current Yuansheng Craft configuration differs from workflow creation",
           "Restore the recorded configuration or start a new workflow with the current configuration.",
+        ),
+      );
+    }
+    if (identity.controller_root_realpath !== input.observation.controllerRootRealpath) {
+      issues.push(
+        resumeIssue(
+          "CONFIG_DRIFT",
+          "Current controller root differs from workflow creation",
+          "Return to the exact controller worktree or start a new workflow from this controller.",
         ),
       );
     }
