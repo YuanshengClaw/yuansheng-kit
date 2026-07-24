@@ -138,6 +138,22 @@ export default {
         "craft-state-machine-principal",
       ],
     },
+    "craft-ssh-verification": {
+      kind: "workflow",
+      logicalPath: "workflows/verification/ssh-verification.ts",
+      source: {
+        kind: "file",
+        path: "plugins/craft/workflows/verification/ssh-verification.ts",
+      },
+      requires: [
+        "craft-candidate-capture",
+        "craft-contract-canonical",
+        "craft-contract-generated-index",
+        "craft-contract-parser",
+        "craft-local-verification",
+        "craft-state-machine-principal",
+      ],
+    },
     "craft-repository-preflight": {
       kind: "workflow",
       logicalPath: "workflows/repository-preflight/preflight.ts",
@@ -416,6 +432,19 @@ export default {
         "craft-runtime-config",
       ],
     },
+    "opencode-openssh-verification-runtime": {
+      kind: "platform-runtime",
+      logicalPath: "opencode/src/openssh-verification-runtime.ts",
+      source: {
+        kind: "file",
+        path: "plugins/craft/opencode/src/openssh-verification-runtime.ts",
+      },
+      requires: [
+        "craft-contract-generated-types",
+        "craft-local-verification",
+        "craft-ssh-verification",
+      ],
+    },
     "opencode-builder-write-guard": {
       kind: "platform-runtime",
       logicalPath: "opencode/src/builder-write-guard.ts",
@@ -464,6 +493,7 @@ export default {
         "craft-candidate-capture",
         "craft-contract-parser",
         "craft-local-verification",
+        "craft-ssh-verification",
         "craft-plan-authorization",
         "craft-repository-preflight",
         "craft-runtime-config",
@@ -477,6 +507,7 @@ export default {
         "craft-write-guard",
         "opencode-builder-write-guard",
         "opencode-controller-runtime",
+        "opencode-openssh-verification-runtime",
       ],
     },
     "root-cause-blueprint-type": {

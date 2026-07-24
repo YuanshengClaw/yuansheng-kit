@@ -7,6 +7,11 @@ import {
   createOpenCodeVerificationLogSink,
 } from "../../plugins/craft/opencode/src/controller-runtime";
 import {
+  buildOpenSshVerificationArgv,
+  OPENSSH_REMOTE_CAPTURE_SCRIPT,
+  quoteOpenSshPosixArgument,
+} from "../../plugins/craft/opencode/src/openssh-verification-runtime";
+import {
   canonicalizeJson,
   sealArtifact,
   sha256Digest,
@@ -37,6 +42,11 @@ import {
   prepareVerification,
   runLocalVerification,
 } from "../../plugins/craft/workflows/verification/local-verification";
+import {
+  runSshVerification,
+  type SshCandidateObservation,
+  type SshVerificationExecutor,
+} from "../../plugins/craft/workflows/verification/ssh-verification";
 
 const WORKFLOW_ID = "workflow:VERIFYING1234567";
 const MACHINE_CRITERION = "criterion:MACHINE123456789";
@@ -94,8 +104,10 @@ function runtimeConfig() {
 
 interface VerificationHarness {
   readonly activeArtifacts: readonly YuanshengCraftContractV1[];
+  readonly binaryPatchBytes: Uint8Array;
   readonly binding: RepositoryBinding;
   readonly candidate: PatchCandidate;
+  readonly entries: DiffManifest["entries"];
   readonly logRoot: string;
   readonly projectRoot: string;
   readonly state: WorkflowState;
@@ -291,11 +303,61 @@ async function makeVerificationHarness(): Promise<VerificationHarness> {
   });
   return {
     activeArtifacts,
+    binaryPatchBytes: new TextEncoder().encode("binary patch"),
     binding,
     candidate,
+    entries,
     logRoot: canonicalLogs,
     projectRoot: canonicalProject,
     state,
+  };
+}
+
+function sshRuntimeConfig() {
+  return parseCraftRuntimeConfigBytes(
+    new TextEncoder().encode(
+      JSON.stringify({
+        repository: {
+          preparation_policy: "manual-only",
+          timeout_ms: 30_000,
+        },
+        verification: {
+          max_iterations: 5,
+          runners: [
+            {
+              command_proposals: [
+                {
+                  argv: ["test-runner", "--machine"],
+                  id: "machine-check",
+                },
+              ],
+              host_alias: "verification-host",
+              id: "remote",
+              remote_cwd: "/srv/ys-craft-candidate",
+              timeout_ms: 30_000,
+              type: "ssh",
+            },
+          ],
+        },
+        version: 1,
+      }),
+    ),
+  );
+}
+
+function sshMachineCommand(): VerificationCommand {
+  return {
+    argv: ["test-runner", "--machine"],
+    command_id: COMMAND_ID,
+    criterion_id: MACHINE_CRITERION,
+    cwd: "/srv/ys-craft-candidate",
+    environment_allowlist: [],
+    host_alias: "verification-host",
+    log_path: "remote-machine.log",
+    required: true,
+    runner_id: "remote",
+    runner_type: "ssh",
+    timeout_seconds: 30,
   };
 }
 
@@ -306,6 +368,7 @@ function machineCommand(): VerificationCommand {
     criterion_id: MACHINE_CRITERION,
     cwd: ".",
     environment_allowlist: ["CI"],
+    host_alias: null,
     log_path: "machine.log",
     required: true,
     runner_id: "local",
@@ -348,6 +411,33 @@ function prepareHarnessArtifacts(harness: VerificationHarness): {
     previousManifests: [],
     principal: VERIFIER,
     proposal: proposal(),
+    state: harness.state,
+  });
+  const active = [...harness.activeArtifacts, prepared.source, prepared.manifest];
+  return {
+    active,
+    prepared,
+    state: advanceState(harness.state, active),
+  };
+}
+
+function prepareSshHarnessArtifacts(harness: VerificationHarness): {
+  readonly active: readonly YuanshengCraftContractV1[];
+  readonly prepared: PreparedVerification;
+  readonly state: WorkflowState;
+} {
+  const prepared = prepareVerification({
+    activeArtifacts: harness.activeArtifacts,
+    at: "2026-07-24T11:06:00.000Z",
+    config: sshRuntimeConfig(),
+    logRootRealpath: harness.logRoot,
+    previousManifests: [],
+    principal: VERIFIER,
+    proposal: {
+      commands: [sshMachineCommand()],
+      humanCriterionIds: [HUMAN_CRITERION],
+      sourceType: "official",
+    },
     state: harness.state,
   });
   const active = [...harness.activeArtifacts, prepared.source, prepared.manifest];
@@ -758,5 +848,350 @@ describe("Yuansheng Craft local verification", () => {
       }),
     ).rejects.toThrow();
     expect(await readFile(logPath, "utf8")).toBe("immutable log");
+  });
+});
+
+describe("Yuansheng Craft SSH verification", () => {
+  function remoteObservation(harness: VerificationHarness): SshCandidateObservation {
+    return {
+      binaryPatchBytes: harness.binaryPatchBytes,
+      entries: harness.entries,
+      headCommit: harness.binding.commit_sha,
+      remoteCwdRealpath: "/srv/ys-craft-candidate",
+      remoteIdentity: "build-host.example:1000:/srv/repository",
+    };
+  }
+
+  test("binds the approved host and records the same per-criterion evidence", async () => {
+    const harness = await makeVerificationHarness();
+    const authorized = authorizeHarness(prepareSshHarnessArtifacts(harness));
+    const calls: unknown[] = [];
+    const logs: Uint8Array[] = [];
+    const executor: SshVerificationExecutor = {
+      async captureCandidate(input) {
+        calls.push({ input, operation: "capture" });
+        return { kind: "observed", observation: remoteObservation(harness) };
+      },
+      async run(input) {
+        calls.push({ input, operation: "run" });
+        return {
+          exitCode: 0,
+          kind: "exited",
+          outputArtifactDigests: [],
+          stderr: new TextEncoder().encode("remote stderr"),
+          stdout: new TextEncoder().encode("remote stdout"),
+        };
+      },
+    };
+    const result = await runSshVerification({
+      activeArtifacts: authorized.active,
+      authorization: authorized.authorization,
+      clock: clock(),
+      humanDecisions: new Map([[HUMAN_CRITERION, HUMAN_ALLOW]]),
+      logSink: {
+        async write(input) {
+          logs.push(input.bytes);
+        },
+      },
+      manifest: authorized.manifest,
+      principal: VERIFIER,
+      sshRunner: executor,
+      state: authorized.state,
+    });
+
+    expect(result).toMatchObject({
+      reason: "complete",
+      remoteWorktree: {
+        cleanupResponsibility: "user",
+        currentState: "unchanged",
+      },
+      status: "pass",
+    });
+    expect(calls).toEqual([
+      {
+        input: {
+          baselineCommit: harness.binding.commit_sha,
+          hostAlias: "verification-host",
+          remoteCwd: "/srv/ys-craft-candidate",
+          timeoutMs: 30_000,
+        },
+        operation: "capture",
+      },
+      {
+        input: {
+          argv: ["test-runner", "--machine"],
+          hostAlias: "verification-host",
+          remoteCwd: "/srv/ys-craft-candidate",
+          timeoutMs: 30_000,
+        },
+        operation: "run",
+      },
+      {
+        input: {
+          baselineCommit: harness.binding.commit_sha,
+          hostAlias: "verification-host",
+          remoteCwd: "/srv/ys-craft-candidate",
+          timeoutMs: 30_000,
+        },
+        operation: "capture",
+      },
+    ]);
+    expect(logs).toHaveLength(1);
+    expect(new TextDecoder().decode(logs[0])).toContain('"host_alias":"verification-host"');
+    expect(new TextDecoder().decode(logs[0])).toContain(
+      '"preflight_protocol":"ys-craft-canonical-diff-v1"',
+    );
+  });
+
+  test("rejects remote candidate mismatch before command execution", async () => {
+    const harness = await makeVerificationHarness();
+    const authorized = authorizeHarness(prepareSshHarnessArtifacts(harness));
+    let executions = 0;
+    const result = await runSshVerification({
+      activeArtifacts: authorized.active,
+      authorization: authorized.authorization,
+      clock: clock(),
+      humanDecisions: new Map([[HUMAN_CRITERION, HUMAN_ALLOW]]),
+      logSink: { async write() {} },
+      manifest: authorized.manifest,
+      principal: VERIFIER,
+      sshRunner: {
+        async captureCandidate() {
+          return {
+            kind: "observed",
+            observation: {
+              ...remoteObservation(harness),
+              entries: [
+                ...harness.entries,
+                {
+                  binary: false,
+                  new_blob_digest: sha256Digest(new TextEncoder().encode("extra")),
+                  new_mode: "100644",
+                  old_blob_digest: null,
+                  old_mode: null,
+                  operation: "create",
+                  path: "extra.txt",
+                  source_path: null,
+                },
+              ],
+            },
+          };
+        },
+        async run() {
+          executions += 1;
+          throw new Error("must not execute");
+        },
+      },
+      state: authorized.state,
+    });
+    expect(executions).toBe(0);
+    expect(result).toMatchObject({
+      reason: "remote_candidate_mismatch",
+      remoteWorktree: {
+        cleanupResponsibility: "user",
+        currentState: "drifted",
+      },
+      status: "blocked",
+    });
+  });
+
+  test("rejects wrong remote cwd and HEAD before command execution", async () => {
+    const harness = await makeVerificationHarness();
+    const authorized = authorizeHarness(prepareSshHarnessArtifacts(harness));
+    for (const observation of [
+      {
+        ...remoteObservation(harness),
+        remoteCwdRealpath: "/srv/wrong-candidate",
+      },
+      {
+        ...remoteObservation(harness),
+        headCommit: "abcdef0123456789abcdef0123456789abcdef01",
+      },
+    ]) {
+      let executions = 0;
+      const result = await runSshVerification({
+        activeArtifacts: authorized.active,
+        authorization: authorized.authorization,
+        clock: clock(),
+        humanDecisions: new Map([[HUMAN_CRITERION, HUMAN_ALLOW]]),
+        logSink: { async write() {} },
+        manifest: authorized.manifest,
+        principal: VERIFIER,
+        sshRunner: {
+          async captureCandidate() {
+            return { kind: "observed", observation };
+          },
+          async run() {
+            executions += 1;
+            throw new Error("must not execute");
+          },
+        },
+        state: authorized.state,
+      });
+      expect(executions).toBe(0);
+      expect(result.status).toBe("blocked");
+    }
+  });
+
+  test("invalidates a result when verification mutates the remote candidate", async () => {
+    const harness = await makeVerificationHarness();
+    const authorized = authorizeHarness(prepareSshHarnessArtifacts(harness));
+    let captures = 0;
+    const result = await runSshVerification({
+      activeArtifacts: authorized.active,
+      authorization: authorized.authorization,
+      clock: clock(),
+      humanDecisions: new Map([[HUMAN_CRITERION, HUMAN_ALLOW]]),
+      logSink: { async write() {} },
+      manifest: authorized.manifest,
+      principal: VERIFIER,
+      sshRunner: {
+        async captureCandidate() {
+          captures += 1;
+          if (captures === 1) {
+            return { kind: "observed", observation: remoteObservation(harness) };
+          }
+          return {
+            kind: "observed",
+            observation: {
+              ...remoteObservation(harness),
+              entries: harness.entries.map((entry) => ({
+                ...entry,
+                new_blob_digest: sha256Digest(new TextEncoder().encode("mutated")),
+              })),
+            },
+          };
+        },
+        async run() {
+          return {
+            exitCode: 0,
+            kind: "exited",
+            outputArtifactDigests: [],
+            stderr: new Uint8Array(),
+            stdout: new Uint8Array(),
+          };
+        },
+      },
+      state: authorized.state,
+    });
+    expect(result).toMatchObject({
+      evidence: [expect.objectContaining({ status: "blocked" })],
+      reason: "remote_verification_mutated_candidate",
+      remoteWorktree: {
+        cleanupResponsibility: "user",
+        currentState: "drifted",
+      },
+      status: "blocked",
+    });
+  });
+
+  test("classifies OpenSSH preflight failures as infrastructure errors", async () => {
+    const harness = await makeVerificationHarness();
+    const authorized = authorizeHarness(prepareSshHarnessArtifacts(harness));
+    const result = await runSshVerification({
+      activeArtifacts: authorized.active,
+      authorization: authorized.authorization,
+      clock: clock(),
+      humanDecisions: new Map([[HUMAN_CRITERION, HUMAN_ALLOW]]),
+      logSink: { async write() {} },
+      manifest: authorized.manifest,
+      principal: VERIFIER,
+      sshRunner: {
+        async captureCandidate() {
+          return {
+            error: "timeout",
+            kind: "infra_error",
+            stderr: new TextEncoder().encode("network timeout"),
+            stdout: new Uint8Array(),
+          };
+        },
+        async run() {
+          throw new Error("must not execute");
+        },
+      },
+      state: authorized.state,
+    });
+    expect(result).toMatchObject({
+      reason: "remote_preflight_infra_error",
+      remoteWorktree: {
+        cleanupResponsibility: "user",
+        currentState: "unknown",
+      },
+      status: "infra_error",
+    });
+  });
+
+  test("keeps remote command timeout as infrastructure evidence", async () => {
+    const harness = await makeVerificationHarness();
+    const authorized = authorizeHarness(prepareSshHarnessArtifacts(harness));
+    const result = await runSshVerification({
+      activeArtifacts: authorized.active,
+      authorization: authorized.authorization,
+      clock: clock(),
+      humanDecisions: new Map([[HUMAN_CRITERION, HUMAN_ALLOW]]),
+      logSink: { async write() {} },
+      manifest: authorized.manifest,
+      principal: VERIFIER,
+      sshRunner: {
+        async captureCandidate() {
+          return { kind: "observed", observation: remoteObservation(harness) };
+        },
+        async run() {
+          return {
+            error: "timeout",
+            kind: "infra_error",
+            stderr: new TextEncoder().encode("remote timeout"),
+            stdout: new Uint8Array(),
+          };
+        },
+      },
+      state: authorized.state,
+    });
+    expect(result.status).toBe("infra_error");
+    expect(result.evidence[0]?.command_results[0]).toMatchObject({
+      infra_error: "timeout",
+      status: "infra_error",
+    });
+  });
+
+  test("centralizes quoting and never proposes synchronization or credential options", async () => {
+    expect(quoteOpenSshPosixArgument("a'b;$(touch /tmp/not-run)")).toBe(
+      "'a'\"'\"'b;$(touch /tmp/not-run)'",
+    );
+    const argv = buildOpenSshVerificationArgv({
+      argv: ["runner", "a'b;$(touch /tmp/not-run)"],
+      hostAlias: "verification-host",
+      remoteCwd: "/srv/ys-craft-candidate",
+      sshExecutable: "/usr/bin/ssh",
+    });
+    expect(argv.slice(0, 3)).toEqual(["/usr/bin/ssh", "--", "verification-host"]);
+    expect(argv).toHaveLength(4);
+    expect(argv.join(" ")).not.toMatch(/\s-(?:i|F|o)\s/u);
+    expect(OPENSSH_REMOTE_CAPTURE_SCRIPT).not.toMatch(
+      /\bgit\s+(?:clone|fetch|checkout)\b|\b(?:apply|rsync|scp|sync)\b/iu,
+    );
+
+    const harness = await makeVerificationHarness();
+    const prepared = prepareSshHarnessArtifacts(harness).prepared.manifest;
+    const serialized = JSON.stringify(prepared);
+    expect(serialized).toContain('"host_alias":"verification-host"');
+    expect(serialized).not.toMatch(/credential|identityfile|password|private[_-]?key|token/iu);
+
+    expect(() =>
+      prepareVerification({
+        activeArtifacts: harness.activeArtifacts,
+        at: "2026-07-24T11:06:00.000Z",
+        config: sshRuntimeConfig(),
+        logRootRealpath: harness.logRoot,
+        previousManifests: [],
+        principal: VERIFIER,
+        proposal: {
+          commands: [{ ...sshMachineCommand(), host_alias: "different-host" }],
+          humanCriterionIds: [HUMAN_CRITERION],
+          sourceType: "official",
+        },
+        state: harness.state,
+      }),
+    ).toThrow("differs from its configured proposal");
   });
 });

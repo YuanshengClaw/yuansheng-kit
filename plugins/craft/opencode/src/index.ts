@@ -42,6 +42,7 @@ export type {
 export {
   assertCandidateWorktreeUnchanged,
   CandidateCaptureError,
+  canonicalizeCapturedDiff,
   captureCanonicalDiff,
   capturePatchCandidate,
 } from "../../workflows/building/candidate-capture";
@@ -176,6 +177,18 @@ export {
   prepareVerification,
   runLocalVerification,
 } from "../../workflows/verification/local-verification";
+export type {
+  RemoteWorktreeDisposition,
+  SshCandidateObservation,
+  SshPreflightResult,
+  SshVerificationExecutor,
+  SshVerificationRun,
+} from "../../workflows/verification/ssh-verification";
+export {
+  runSshVerification,
+  SSH_PREFLIGHT_PROTOCOL,
+  SshVerificationError,
+} from "../../workflows/verification/ssh-verification";
 export type { OpenCodeBuilderWriteGuard } from "./builder-write-guard";
 export { createOpenCodeBuilderWriteGuard } from "./builder-write-guard";
 export type { OpenCodeCraftController } from "./controller-runtime";
@@ -186,6 +199,13 @@ export {
   createOpenCodeVerificationLogSink,
   loadOpenCodeCraftController,
 } from "./controller-runtime";
+export {
+  buildOpenSshVerificationArgv,
+  createOpenCodeSshVerificationRunner,
+  OPENSSH_REMOTE_CAPTURE_SCRIPT,
+  quoteOpenSshPosixArgument,
+  resolveSystemSshExecutable,
+} from "./openssh-verification-runtime";
 
 const TOOL_DESCRIPTIONS = Object.freeze(
   Object.fromEntries(

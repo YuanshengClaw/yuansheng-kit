@@ -188,8 +188,10 @@ function assertOfficialCommand(
     fail("Configured verification runner disappeared");
   }
   const configuredCwd = runner.type === "local" ? runner.cwd : runner.remote_cwd;
+  const configuredHostAlias = runner.type === "local" ? null : runner.host_alias;
   if (
     command.cwd !== configuredCwd ||
+    command.host_alias !== configuredHostAlias ||
     command.timeout_seconds * 1_000 > runner.timeout_ms ||
     !runner.command_proposals.some((proposal) => sameArgv(proposal.argv, command.argv))
   ) {
@@ -204,6 +206,7 @@ function copyCommands(commands: readonly VerificationCommand[]): VerificationCom
     criterion_id: command.criterion_id,
     cwd: command.cwd,
     environment_allowlist: [...command.environment_allowlist],
+    host_alias: command.host_alias,
     log_path: command.log_path,
     required: command.required,
     runner_id: command.runner_id,
@@ -276,6 +279,9 @@ export function prepareVerification(input: {
     human_criterion_ids: [...source.human_criterion_ids],
     log_root_realpath: input.logRootRealpath,
     repository_binding_ref: artifactRef(binding),
+    ssh_preflight_protocol: input.proposal.commands.some((command) => command.runner_type === "ssh")
+      ? "ys-craft-canonical-diff-v1"
+      : null,
     source_ref: artifactRef(source),
     target_worktree_realpath: binding.target_worktree_realpath,
     workflow_id: input.state.workflow_id,
@@ -380,10 +386,11 @@ function filterEnvironment(
   return Object.freeze(selected);
 }
 
-function buildLogBytes(input: {
+export function buildVerificationLogBytes(input: {
   readonly commandId: string;
   readonly exitCode: number | null;
   readonly infraError: VerificationCommandResult["infra_error"];
+  readonly metadata?: Readonly<Record<string, JsonValue>>;
   readonly stderr: Uint8Array;
   readonly stdout: Uint8Array;
 }): Uint8Array {
@@ -391,6 +398,7 @@ function buildLogBytes(input: {
     command_id: input.commandId,
     exit_code: input.exitCode,
     infra_error: input.infraError,
+    metadata: input.metadata ?? {},
     stderr_bytes: input.stderr.byteLength,
     stderr_digest: sha256Digest(input.stderr),
     stdout_bytes: input.stdout.byteLength,
@@ -436,7 +444,7 @@ async function executeCommand(input: {
   const finishedAt = input.clock.now();
   const exitCode = processResult.kind === "exited" ? processResult.exitCode : null;
   const infraError = processResult.kind === "infra_error" ? processResult.error : null;
-  const logBytes = buildLogBytes({
+  const logBytes = buildVerificationLogBytes({
     commandId: input.command.command_id,
     exitCode,
     infraError,
@@ -487,7 +495,7 @@ function machineEvidenceStatus(
   return "blocked";
 }
 
-function sealMachineEvidence(input: {
+export function sealMachineCriterionEvidence(input: {
   readonly candidate: PatchCandidate;
   readonly commands: readonly VerificationCommand[];
   readonly criterionId: string;
@@ -519,7 +527,18 @@ function sealMachineEvidence(input: {
   });
 }
 
-function sealHumanEvidence(input: {
+export function blockMachineCriterionEvidence(evidence: CriterionEvidence): CriterionEvidence {
+  if (evidence.evidence_kind !== "machine") {
+    return fail("Only machine criterion evidence may be blocked by candidate drift");
+  }
+  const { artifact_digest: _digest, ...payload } = evidence;
+  return seal<CriterionEvidence>({
+    ...payload,
+    status: "blocked",
+  });
+}
+
+export function sealHumanCriterionEvidence(input: {
   readonly candidate: PatchCandidate;
   readonly criterionId: string;
   readonly decision: HumanCriterionDecision;
@@ -548,7 +567,7 @@ function sealHumanEvidence(input: {
   });
 }
 
-function overallStatus(
+export function verificationOverallStatus(
   rootCause: RootCauseArtifact,
   evidence: readonly CriterionEvidence[],
 ): LocalVerificationRun["status"] {
@@ -646,7 +665,7 @@ export async function runLocalVerification(input: {
       const criterionResults = results.filter((result) =>
         commands.some((item) => item.command_id === result.command_id),
       );
-      const evidence = sealMachineEvidence({
+      const evidence = sealMachineCriterionEvidence({
         candidate,
         commands,
         criterionId: command.criterion_id,
@@ -655,13 +674,8 @@ export async function runLocalVerification(input: {
         results: criterionResults,
         workflowId: input.state.workflow_id,
       });
-      const { artifact_digest: _digest, ...payload } = evidence;
-      const blockedEvidence = seal<CriterionEvidence>({
-        ...payload,
-        status: "blocked",
-      });
       return Object.freeze({
-        evidence: [blockedEvidence],
+        evidence: [blockMachineCriterionEvidence(evidence)],
         observedDiffContentDigest,
         status: "blocked",
       });
@@ -677,7 +691,7 @@ export async function runLocalVerification(input: {
       (command) => command.criterion_id === criterionId,
     );
     evidence.push(
-      sealMachineEvidence({
+      sealMachineCriterionEvidence({
         candidate,
         commands,
         criterionId,
@@ -694,7 +708,7 @@ export async function runLocalVerification(input: {
     const decision = input.humanDecisions.get(criterionId);
     if (decision !== undefined) {
       evidence.push(
-        sealHumanEvidence({
+        sealHumanCriterionEvidence({
           candidate,
           criterionId,
           decision,
@@ -708,6 +722,6 @@ export async function runLocalVerification(input: {
   return Object.freeze({
     evidence: Object.freeze(evidence),
     observedDiffContentDigest,
-    status: overallStatus(rootCause, evidence),
+    status: verificationOverallStatus(rootCause, evidence),
   });
 }

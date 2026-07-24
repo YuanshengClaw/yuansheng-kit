@@ -374,6 +374,100 @@ function assertExactAuthorizedDiff(
   }
 }
 
+function normalizeAuthorizedEntryRenames(
+  capturedEntries: readonly DiffEntry[],
+  authorization: MutationAuthorization,
+): DiffEntry[] {
+  const entries = [...capturedEntries];
+  for (const approved of authorization.authorized_changes.filter(
+    (change) => change.operation === "rename",
+  )) {
+    if (approved.source_path === null) {
+      return fail("Approved rename omitted its source path");
+    }
+    if (
+      entries.some(
+        (entry) =>
+          entry.operation === "rename" &&
+          entry.path === approved.path &&
+          entry.source_path === approved.source_path,
+      )
+    ) {
+      continue;
+    }
+    const deletionIndex = entries.findIndex(
+      (entry) =>
+        entry.operation === "delete" &&
+        entry.path === approved.source_path &&
+        entry.source_path === null,
+    );
+    const creationIndex = entries.findIndex(
+      (entry) =>
+        entry.operation === "create" && entry.path === approved.path && entry.source_path === null,
+    );
+    const deletion = entries[deletionIndex];
+    const creation = entries[creationIndex];
+    if (
+      deletionIndex < 0 ||
+      creationIndex < 0 ||
+      deletion === undefined ||
+      creation === undefined
+    ) {
+      continue;
+    }
+    entries.splice(Math.max(deletionIndex, creationIndex), 1);
+    entries.splice(Math.min(deletionIndex, creationIndex), 1);
+    entries.push({
+      binary: deletion.binary || creation.binary,
+      new_blob_digest: creation.new_blob_digest,
+      new_mode: creation.new_mode,
+      old_blob_digest: deletion.old_blob_digest,
+      old_mode: deletion.old_mode,
+      operation: "rename",
+      path: approved.path,
+      source_path: approved.source_path,
+    });
+  }
+  return entries;
+}
+
+export function canonicalizeCapturedDiff(input: {
+  readonly authorization: MutationAuthorization;
+  readonly binaryPatchBytes: Uint8Array;
+  readonly entries: readonly DiffEntry[];
+}): CanonicalDiffSnapshot {
+  if (input.entries.length === 0) {
+    return fail("Cannot canonicalize an empty patch candidate");
+  }
+  const entries = normalizeAuthorizedEntryRenames(input.entries, input.authorization).sort(
+    compareEntries,
+  ) as DiffManifest["entries"];
+  const paths = new Set<string>();
+  for (const entry of entries) {
+    assertCanonicalRelativePath(entry.path);
+    if (entry.source_path !== null) {
+      assertCanonicalRelativePath(entry.source_path);
+    }
+    if (paths.has(entry.path)) {
+      return fail(`Candidate path appears more than once: ${entry.path}`);
+    }
+    paths.add(entry.path);
+  }
+  assertExactAuthorizedDiff(entries, input.authorization);
+  const binaryPatchBytes = new Uint8Array(input.binaryPatchBytes);
+  const binaryPatchDigest = sha256Digest(binaryPatchBytes);
+  const diffContentDigest = canonicalizeJson({
+    binary_patch_digest: binaryPatchDigest,
+    entries,
+  }).digest;
+  return Object.freeze({
+    binaryPatchBytes,
+    binaryPatchDigest,
+    diffContentDigest,
+    entries,
+  });
+}
+
 export async function captureCanonicalDiff(input: {
   readonly authorization: MutationAuthorization;
   readonly binding: RepositoryBinding;
@@ -443,8 +537,6 @@ export async function captureCanonicalDiff(input: {
   const entries = (
     await Promise.all(changes.map((change) => buildEntry(input.gitRunner, input.binding, change)))
   ).sort(compareEntries) as DiffManifest["entries"];
-  assertExactAuthorizedDiff(entries, input.authorization);
-
   const trackedPatch = await git(input.gitRunner, input.binding.product_root_realpath, [
     "git",
     "diff",
@@ -479,15 +571,9 @@ export async function captureCanonicalDiff(input: {
     untrackedPatches.push(patch.stdout);
   }
   const binaryPatchBytes = concatenate([trackedPatch.stdout, ...untrackedPatches]);
-  const binaryPatchDigest = sha256Digest(binaryPatchBytes);
-  const diffContentDigest = canonicalizeJson({
-    binary_patch_digest: binaryPatchDigest,
-    entries,
-  }).digest;
-  return Object.freeze({
+  return canonicalizeCapturedDiff({
+    authorization: input.authorization,
     binaryPatchBytes,
-    binaryPatchDigest,
-    diffContentDigest,
     entries,
   });
 }

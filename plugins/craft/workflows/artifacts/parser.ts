@@ -122,6 +122,16 @@ function inspectPaths(value: unknown): void {
 function assertVerificationCommand(command: VerificationCommand): void {
   assertCanonicalPath(command.cwd, command.runner_type === "ssh");
   assertCanonicalPath(command.log_path, false);
+  if (
+    (command.runner_type === "local" && command.host_alias !== null) ||
+    (command.runner_type === "ssh" && command.host_alias === null) ||
+    (command.runner_type === "ssh" && command.environment_allowlist.length !== 0)
+  ) {
+    fail(
+      "semantic-invalid",
+      `Verification command ${command.command_id} has an invalid runner target`,
+    );
+  }
   if (command.argv.some((argument) => argument.includes("\0"))) {
     fail("semantic-invalid", `Verification command ${command.command_id} contains NUL argv`);
   }
@@ -343,6 +353,13 @@ function assertContractSemantics(contract: YuanshengCraftContractV1): void {
       );
       for (const command of contract.commands) {
         assertVerificationCommand(command);
+      }
+      if (
+        contract.commands.some((command) => command.runner_type === "ssh")
+          ? contract.ssh_preflight_protocol !== "ys-craft-canonical-diff-v1"
+          : contract.ssh_preflight_protocol !== null
+      ) {
+        fail("semantic-invalid", "Verification manifest preflight does not match its runners");
       }
       break;
     case "verification-authorization":

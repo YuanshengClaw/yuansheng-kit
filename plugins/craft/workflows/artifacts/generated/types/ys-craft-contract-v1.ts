@@ -199,6 +199,7 @@ export type VerificationManifest = ArtifactBase &
     human_criterion_ids: OpaqueId[];
     log_root_realpath: Realpath;
     repository_binding_ref: ArtifactRef;
+    ssh_preflight_protocol: "ys-craft-canonical-diff-v1" | null;
     source_ref: ArtifactRef;
     target_worktree_realpath: Realpath;
   };
@@ -449,6 +450,7 @@ export interface VerificationCommand {
   criterion_id: OpaqueId;
   cwd: NonEmptyString;
   environment_allowlist: string[];
+  host_alias: string | null;
   log_path: RelativePath;
   required: boolean;
   runner_id: RuntimeIdentifier;

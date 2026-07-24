@@ -1144,6 +1144,7 @@
         "criterion_id",
         "cwd",
         "environment_allowlist",
+        "host_alias",
         "log_path",
         "required",
         "runner_id",
@@ -1174,6 +1175,17 @@
             "type": "string",
             "pattern": "^[A-Z_][A-Z0-9_]*$"
           }
+        },
+        "host_alias": {
+          "oneOf": [
+            {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "log_path": {
           "$ref": "#/$defs/relative_path"
@@ -1271,6 +1283,7 @@
             "human_criterion_ids",
             "log_root_realpath",
             "repository_binding_ref",
+            "ssh_preflight_protocol",
             "source_ref",
             "target_worktree_realpath"
           ],
@@ -1309,6 +1322,16 @@
             },
             "repository_binding_ref": {
               "$ref": "#/$defs/artifact_ref"
+            },
+            "ssh_preflight_protocol": {
+              "oneOf": [
+                {
+                  "const": "ys-craft-canonical-diff-v1"
+                },
+                {
+                  "type": "null"
+                }
+              ]
             },
             "source_ref": {
               "$ref": "#/$defs/artifact_ref"
