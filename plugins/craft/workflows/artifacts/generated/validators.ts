@@ -993,28 +993,42 @@ const schema31 = {
           type: "object",
           required: [
             "artifact_type",
+            "builder_session_id",
             "candidate_ref",
             "criterion_evidence_refs",
+            "diff_content_digest",
+            "diff_manifest_ref",
             "findings",
+            "manifest_ref",
             "reviewer",
             "root_cause_eliminated",
             "status",
+            "unresolved_gap_ids",
             "verification_sufficient",
             "within_approved_scope",
           ],
           properties: {
             artifact_type: { const: "patch-review" },
             candidate_ref: { $ref: "#/$defs/artifact_ref" },
+            builder_session_id: { $ref: "#/$defs/opaque_id" },
             criterion_evidence_refs: {
               type: "array",
               minItems: 1,
               uniqueItems: true,
               items: { $ref: "#/$defs/artifact_ref" },
             },
+            diff_content_digest: { $ref: "#/$defs/digest" },
+            diff_manifest_ref: { $ref: "#/$defs/artifact_ref" },
             findings: { type: "array", items: { $ref: "#/$defs/review_finding" } },
+            manifest_ref: { $ref: "#/$defs/artifact_ref" },
             reviewer: { $ref: "#/$defs/principal" },
             root_cause_eliminated: { type: "boolean" },
             status: { enum: ["fail", "pass"] },
+            unresolved_gap_ids: {
+              type: "array",
+              uniqueItems: true,
+              items: { $ref: "#/$defs/opaque_id" },
+            },
             verification_sufficient: { type: "boolean" },
             within_approved_scope: { type: "boolean" },
           },
@@ -1033,18 +1047,30 @@ const schema31 = {
           required: [
             "artifact_type",
             "candidate_ref",
+            "changed_paths",
             "criterion_evidence_refs",
             "delivery_patch_digest",
+            "diff_manifest_ref",
+            "follow_up_steps",
+            "human_criterion_ids",
+            "manifest_ref",
             "patch_review_ref",
             "plan_ref",
             "residual_risks",
             "root_cause_ref",
             "status",
             "summary",
+            "verified_criterion_ids",
           ],
           properties: {
             artifact_type: { const: "delivery" },
             candidate_ref: { $ref: "#/$defs/artifact_ref" },
+            changed_paths: {
+              type: "array",
+              minItems: 1,
+              uniqueItems: true,
+              items: { $ref: "#/$defs/relative_path" },
+            },
             criterion_evidence_refs: {
               type: "array",
               minItems: 1,
@@ -1052,6 +1078,18 @@ const schema31 = {
               items: { $ref: "#/$defs/artifact_ref" },
             },
             delivery_patch_digest: { $ref: "#/$defs/digest" },
+            diff_manifest_ref: { $ref: "#/$defs/artifact_ref" },
+            follow_up_steps: {
+              type: "array",
+              uniqueItems: true,
+              items: { $ref: "#/$defs/non_empty_string" },
+            },
+            human_criterion_ids: {
+              type: "array",
+              uniqueItems: true,
+              items: { $ref: "#/$defs/opaque_id" },
+            },
+            manifest_ref: { $ref: "#/$defs/artifact_ref" },
             patch_review_ref: { $ref: "#/$defs/artifact_ref" },
             plan_ref: { $ref: "#/$defs/artifact_ref" },
             residual_risks: {
@@ -1062,6 +1100,12 @@ const schema31 = {
             root_cause_ref: { $ref: "#/$defs/artifact_ref" },
             status: { const: "complete" },
             summary: { $ref: "#/$defs/non_empty_string" },
+            verified_criterion_ids: {
+              type: "array",
+              minItems: 1,
+              uniqueItems: true,
+              items: { $ref: "#/$defs/opaque_id" },
+            },
           },
         },
       ],
@@ -15784,28 +15828,42 @@ const schema161 = {
       type: "object",
       required: [
         "artifact_type",
+        "builder_session_id",
         "candidate_ref",
         "criterion_evidence_refs",
+        "diff_content_digest",
+        "diff_manifest_ref",
         "findings",
+        "manifest_ref",
         "reviewer",
         "root_cause_eliminated",
         "status",
+        "unresolved_gap_ids",
         "verification_sufficient",
         "within_approved_scope",
       ],
       properties: {
         artifact_type: { const: "patch-review" },
         candidate_ref: { $ref: "#/$defs/artifact_ref" },
+        builder_session_id: { $ref: "#/$defs/opaque_id" },
         criterion_evidence_refs: {
           type: "array",
           minItems: 1,
           uniqueItems: true,
           items: { $ref: "#/$defs/artifact_ref" },
         },
+        diff_content_digest: { $ref: "#/$defs/digest" },
+        diff_manifest_ref: { $ref: "#/$defs/artifact_ref" },
         findings: { type: "array", items: { $ref: "#/$defs/review_finding" } },
+        manifest_ref: { $ref: "#/$defs/artifact_ref" },
         reviewer: { $ref: "#/$defs/principal" },
         root_cause_eliminated: { type: "boolean" },
         status: { enum: ["fail", "pass"] },
+        unresolved_gap_ids: {
+          type: "array",
+          uniqueItems: true,
+          items: { $ref: "#/$defs/opaque_id" },
+        },
         verification_sufficient: { type: "boolean" },
         within_approved_scope: { type: "boolean" },
       },
@@ -15813,7 +15871,7 @@ const schema161 = {
   ],
   unevaluatedProperties: false,
 };
-const schema162 = {
+const schema164 = {
   title: "ReviewFinding",
   type: "object",
   additionalProperties: false,
@@ -15825,13 +15883,13 @@ const schema162 = {
   },
 };
 
-function validate146(
+function validate147(
   data,
   { instancePath = "", parentData, parentDataProperty, rootData = data, dynamicAnchors = {} } = {},
 ) {
   let vErrors = null;
   let errors = 0;
-  const evaluated0 = validate146.evaluated;
+  const evaluated0 = validate147.evaluated;
   if (evaluated0.dynamicProps) {
     evaluated0.props = undefined;
   }
@@ -15942,7 +16000,7 @@ function validate146(
           instancePath: instancePath + "/severity",
           schemaPath: "#/properties/severity/enum",
           keyword: "enum",
-          params: { allowedValues: schema162.properties.severity.enum },
+          params: { allowedValues: schema164.properties.severity.enum },
           message: "must be equal to one of the allowed values",
         };
         if (vErrors === null) {
@@ -16002,10 +16060,10 @@ function validate146(
     }
     errors++;
   }
-  validate146.errors = vErrors;
+  validate147.errors = vErrors;
   return errors === 0;
 }
-validate146.evaluated = { props: true, dynamicProps: false, dynamicItems: false };
+validate147.evaluated = { props: true, dynamicProps: false, dynamicItems: false };
 
 function validate141(
   data,
@@ -16048,13 +16106,13 @@ function validate141(
       }
       errors++;
     }
-    if (data.candidate_ref === undefined || !func0.call(data, "candidate_ref")) {
+    if (data.builder_session_id === undefined || !func0.call(data, "builder_session_id")) {
       const err1 = {
         instancePath,
         schemaPath: "#/allOf/2/required",
         keyword: "required",
-        params: { missingProperty: "candidate_ref" },
-        message: "must have required property '" + "candidate_ref" + "'",
+        params: { missingProperty: "builder_session_id" },
+        message: "must have required property '" + "builder_session_id" + "'",
       };
       if (vErrors === null) {
         vErrors = [err1];
@@ -16063,16 +16121,13 @@ function validate141(
       }
       errors++;
     }
-    if (
-      data.criterion_evidence_refs === undefined ||
-      !func0.call(data, "criterion_evidence_refs")
-    ) {
+    if (data.candidate_ref === undefined || !func0.call(data, "candidate_ref")) {
       const err2 = {
         instancePath,
         schemaPath: "#/allOf/2/required",
         keyword: "required",
-        params: { missingProperty: "criterion_evidence_refs" },
-        message: "must have required property '" + "criterion_evidence_refs" + "'",
+        params: { missingProperty: "candidate_ref" },
+        message: "must have required property '" + "candidate_ref" + "'",
       };
       if (vErrors === null) {
         vErrors = [err2];
@@ -16081,13 +16136,16 @@ function validate141(
       }
       errors++;
     }
-    if (data.findings === undefined || !func0.call(data, "findings")) {
+    if (
+      data.criterion_evidence_refs === undefined ||
+      !func0.call(data, "criterion_evidence_refs")
+    ) {
       const err3 = {
         instancePath,
         schemaPath: "#/allOf/2/required",
         keyword: "required",
-        params: { missingProperty: "findings" },
-        message: "must have required property '" + "findings" + "'",
+        params: { missingProperty: "criterion_evidence_refs" },
+        message: "must have required property '" + "criterion_evidence_refs" + "'",
       };
       if (vErrors === null) {
         vErrors = [err3];
@@ -16096,13 +16154,13 @@ function validate141(
       }
       errors++;
     }
-    if (data.reviewer === undefined || !func0.call(data, "reviewer")) {
+    if (data.diff_content_digest === undefined || !func0.call(data, "diff_content_digest")) {
       const err4 = {
         instancePath,
         schemaPath: "#/allOf/2/required",
         keyword: "required",
-        params: { missingProperty: "reviewer" },
-        message: "must have required property '" + "reviewer" + "'",
+        params: { missingProperty: "diff_content_digest" },
+        message: "must have required property '" + "diff_content_digest" + "'",
       };
       if (vErrors === null) {
         vErrors = [err4];
@@ -16111,13 +16169,13 @@ function validate141(
       }
       errors++;
     }
-    if (data.root_cause_eliminated === undefined || !func0.call(data, "root_cause_eliminated")) {
+    if (data.diff_manifest_ref === undefined || !func0.call(data, "diff_manifest_ref")) {
       const err5 = {
         instancePath,
         schemaPath: "#/allOf/2/required",
         keyword: "required",
-        params: { missingProperty: "root_cause_eliminated" },
-        message: "must have required property '" + "root_cause_eliminated" + "'",
+        params: { missingProperty: "diff_manifest_ref" },
+        message: "must have required property '" + "diff_manifest_ref" + "'",
       };
       if (vErrors === null) {
         vErrors = [err5];
@@ -16126,13 +16184,13 @@ function validate141(
       }
       errors++;
     }
-    if (data.status === undefined || !func0.call(data, "status")) {
+    if (data.findings === undefined || !func0.call(data, "findings")) {
       const err6 = {
         instancePath,
         schemaPath: "#/allOf/2/required",
         keyword: "required",
-        params: { missingProperty: "status" },
-        message: "must have required property '" + "status" + "'",
+        params: { missingProperty: "findings" },
+        message: "must have required property '" + "findings" + "'",
       };
       if (vErrors === null) {
         vErrors = [err6];
@@ -16141,16 +16199,13 @@ function validate141(
       }
       errors++;
     }
-    if (
-      data.verification_sufficient === undefined ||
-      !func0.call(data, "verification_sufficient")
-    ) {
+    if (data.manifest_ref === undefined || !func0.call(data, "manifest_ref")) {
       const err7 = {
         instancePath,
         schemaPath: "#/allOf/2/required",
         keyword: "required",
-        params: { missingProperty: "verification_sufficient" },
-        message: "must have required property '" + "verification_sufficient" + "'",
+        params: { missingProperty: "manifest_ref" },
+        message: "must have required property '" + "manifest_ref" + "'",
       };
       if (vErrors === null) {
         vErrors = [err7];
@@ -16159,13 +16214,13 @@ function validate141(
       }
       errors++;
     }
-    if (data.within_approved_scope === undefined || !func0.call(data, "within_approved_scope")) {
+    if (data.reviewer === undefined || !func0.call(data, "reviewer")) {
       const err8 = {
         instancePath,
         schemaPath: "#/allOf/2/required",
         keyword: "required",
-        params: { missingProperty: "within_approved_scope" },
-        message: "must have required property '" + "within_approved_scope" + "'",
+        params: { missingProperty: "reviewer" },
+        message: "must have required property '" + "reviewer" + "'",
       };
       if (vErrors === null) {
         vErrors = [err8];
@@ -16174,9 +16229,87 @@ function validate141(
       }
       errors++;
     }
+    if (data.root_cause_eliminated === undefined || !func0.call(data, "root_cause_eliminated")) {
+      const err9 = {
+        instancePath,
+        schemaPath: "#/allOf/2/required",
+        keyword: "required",
+        params: { missingProperty: "root_cause_eliminated" },
+        message: "must have required property '" + "root_cause_eliminated" + "'",
+      };
+      if (vErrors === null) {
+        vErrors = [err9];
+      } else {
+        vErrors.push(err9);
+      }
+      errors++;
+    }
+    if (data.status === undefined || !func0.call(data, "status")) {
+      const err10 = {
+        instancePath,
+        schemaPath: "#/allOf/2/required",
+        keyword: "required",
+        params: { missingProperty: "status" },
+        message: "must have required property '" + "status" + "'",
+      };
+      if (vErrors === null) {
+        vErrors = [err10];
+      } else {
+        vErrors.push(err10);
+      }
+      errors++;
+    }
+    if (data.unresolved_gap_ids === undefined || !func0.call(data, "unresolved_gap_ids")) {
+      const err11 = {
+        instancePath,
+        schemaPath: "#/allOf/2/required",
+        keyword: "required",
+        params: { missingProperty: "unresolved_gap_ids" },
+        message: "must have required property '" + "unresolved_gap_ids" + "'",
+      };
+      if (vErrors === null) {
+        vErrors = [err11];
+      } else {
+        vErrors.push(err11);
+      }
+      errors++;
+    }
+    if (
+      data.verification_sufficient === undefined ||
+      !func0.call(data, "verification_sufficient")
+    ) {
+      const err12 = {
+        instancePath,
+        schemaPath: "#/allOf/2/required",
+        keyword: "required",
+        params: { missingProperty: "verification_sufficient" },
+        message: "must have required property '" + "verification_sufficient" + "'",
+      };
+      if (vErrors === null) {
+        vErrors = [err12];
+      } else {
+        vErrors.push(err12);
+      }
+      errors++;
+    }
+    if (data.within_approved_scope === undefined || !func0.call(data, "within_approved_scope")) {
+      const err13 = {
+        instancePath,
+        schemaPath: "#/allOf/2/required",
+        keyword: "required",
+        params: { missingProperty: "within_approved_scope" },
+        message: "must have required property '" + "within_approved_scope" + "'",
+      };
+      if (vErrors === null) {
+        vErrors = [err13];
+      } else {
+        vErrors.push(err13);
+      }
+      errors++;
+    }
     if (data.artifact_type !== undefined && func0.call(data, "artifact_type")) {
       if ("patch-review" !== data.artifact_type) {
-        const err9 = {
+        const err14 = {
           instancePath: instancePath + "/artifact_type",
           schemaPath: "#/allOf/2/properties/artifact_type/const",
           keyword: "const",
@@ -16184,9 +16317,9 @@ function validate141(
           message: "must be equal to constant",
         };
         if (vErrors === null) {
-          vErrors = [err9];
+          vErrors = [err14];
         } else {
-          vErrors.push(err9);
+          vErrors.push(err14);
         }
         errors++;
       }
@@ -16205,11 +16338,45 @@ function validate141(
         errors = vErrors.length;
       }
     }
+    if (data.builder_session_id !== undefined && func0.call(data, "builder_session_id")) {
+      let data2 = data.builder_session_id;
+      if (typeof data2 === "string") {
+        if (!pattern6.test(data2)) {
+          const err15 = {
+            instancePath: instancePath + "/builder_session_id",
+            schemaPath: "#/$defs/opaque_id/pattern",
+            keyword: "pattern",
+            params: { pattern: "^[a-z][a-z0-9-]*:[A-Za-z0-9_-]{16,128}$" },
+            message: 'must match pattern "' + "^[a-z][a-z0-9-]*:[A-Za-z0-9_-]{16,128}$" + '"',
+          };
+          if (vErrors === null) {
+            vErrors = [err15];
+          } else {
+            vErrors.push(err15);
+          }
+          errors++;
+        }
+      } else {
+        const err16 = {
+          instancePath: instancePath + "/builder_session_id",
+          schemaPath: "#/$defs/opaque_id/type",
+          keyword: "type",
+          params: { type: "string" },
+          message: "must be string",
+        };
+        if (vErrors === null) {
+          vErrors = [err16];
+        } else {
+          vErrors.push(err16);
+        }
+        errors++;
+      }
+    }
     if (data.criterion_evidence_refs !== undefined && func0.call(data, "criterion_evidence_refs")) {
-      let data2 = data.criterion_evidence_refs;
-      if (Array.isArray(data2)) {
-        if (data2.length < 1) {
-          const err10 = {
+      let data3 = data.criterion_evidence_refs;
+      if (Array.isArray(data3)) {
+        if (data3.length < 1) {
+          const err17 = {
             instancePath: instancePath + "/criterion_evidence_refs",
             schemaPath: "#/allOf/2/properties/criterion_evidence_refs/minItems",
             keyword: "minItems",
@@ -16217,18 +16384,18 @@ function validate141(
             message: "must NOT have fewer than 1 items",
           };
           if (vErrors === null) {
-            vErrors = [err10];
+            vErrors = [err17];
           } else {
-            vErrors.push(err10);
+            vErrors.push(err17);
           }
           errors++;
         }
-        const len0 = data2.length;
+        const len0 = data3.length;
         for (let i0 = 0; i0 < len0; i0++) {
           if (
-            !validate29(data2[i0], {
+            !validate29(data3[i0], {
               instancePath: instancePath + "/criterion_evidence_refs/" + i0,
-              parentData: data2,
+              parentData: data3,
               parentDataProperty: i0,
               rootData,
               dynamicAnchors,
@@ -16238,13 +16405,13 @@ function validate141(
             errors = vErrors.length;
           }
         }
-        let i1 = data2.length;
+        let i1 = data3.length;
         let j0;
         if (i1 > 1) {
           outer0: for (; i1--; ) {
             for (j0 = i1; j0--; ) {
-              if (func27(data2[i1], data2[j0])) {
-                const err11 = {
+              if (func27(data3[i1], data3[j0])) {
+                const err18 = {
                   instancePath: instancePath + "/criterion_evidence_refs",
                   schemaPath: "#/allOf/2/properties/criterion_evidence_refs/uniqueItems",
                   keyword: "uniqueItems",
@@ -16257,9 +16424,9 @@ function validate141(
                     " are identical)",
                 };
                 if (vErrors === null) {
-                  vErrors = [err11];
+                  vErrors = [err18];
                 } else {
-                  vErrors.push(err11);
+                  vErrors.push(err18);
                 }
                 errors++;
                 break outer0;
@@ -16268,7 +16435,7 @@ function validate141(
           }
         }
       } else {
-        const err12 = {
+        const err19 = {
           instancePath: instancePath + "/criterion_evidence_refs",
           schemaPath: "#/allOf/2/properties/criterion_evidence_refs/type",
           keyword: "type",
@@ -16276,33 +16443,81 @@ function validate141(
           message: "must be array",
         };
         if (vErrors === null) {
-          vErrors = [err12];
+          vErrors = [err19];
         } else {
-          vErrors.push(err12);
+          vErrors.push(err19);
         }
         errors++;
       }
     }
+    if (data.diff_content_digest !== undefined && func0.call(data, "diff_content_digest")) {
+      let data5 = data.diff_content_digest;
+      if (typeof data5 === "string") {
+        if (!pattern4.test(data5)) {
+          const err20 = {
+            instancePath: instancePath + "/diff_content_digest",
+            schemaPath: "#/$defs/digest/pattern",
+            keyword: "pattern",
+            params: { pattern: "^sha256:[0-9a-f]{64}$" },
+            message: 'must match pattern "' + "^sha256:[0-9a-f]{64}$" + '"',
+          };
+          if (vErrors === null) {
+            vErrors = [err20];
+          } else {
+            vErrors.push(err20);
+          }
+          errors++;
+        }
+      } else {
+        const err21 = {
+          instancePath: instancePath + "/diff_content_digest",
+          schemaPath: "#/$defs/digest/type",
+          keyword: "type",
+          params: { type: "string" },
+          message: "must be string",
+        };
+        if (vErrors === null) {
+          vErrors = [err21];
+        } else {
+          vErrors.push(err21);
+        }
+        errors++;
+      }
+    }
+    if (data.diff_manifest_ref !== undefined && func0.call(data, "diff_manifest_ref")) {
+      if (
+        !validate29(data.diff_manifest_ref, {
+          instancePath: instancePath + "/diff_manifest_ref",
+          parentData: data,
+          parentDataProperty: "diff_manifest_ref",
+          rootData,
+          dynamicAnchors,
+        })
+      ) {
+        vErrors = vErrors === null ? validate29.errors : vErrors.concat(validate29.errors);
+        errors = vErrors.length;
+      }
+    }
     if (data.findings !== undefined && func0.call(data, "findings")) {
-      let data4 = data.findings;
-      if (Array.isArray(data4)) {
-        const len1 = data4.length;
+      let data7 = data.findings;
+      if (Array.isArray(data7)) {
+        const len1 = data7.length;
         for (let i2 = 0; i2 < len1; i2++) {
           if (
-            !validate146(data4[i2], {
+            !validate147(data7[i2], {
               instancePath: instancePath + "/findings/" + i2,
-              parentData: data4,
+              parentData: data7,
               parentDataProperty: i2,
               rootData,
               dynamicAnchors,
             })
           ) {
-            vErrors = vErrors === null ? validate146.errors : vErrors.concat(validate146.errors);
+            vErrors = vErrors === null ? validate147.errors : vErrors.concat(validate147.errors);
             errors = vErrors.length;
           }
         }
       } else {
-        const err13 = {
+        const err22 = {
           instancePath: instancePath + "/findings",
           schemaPath: "#/allOf/2/properties/findings/type",
           keyword: "type",
@@ -16310,11 +16525,25 @@ function validate141(
           message: "must be array",
         };
         if (vErrors === null) {
-          vErrors = [err13];
+          vErrors = [err22];
         } else {
-          vErrors.push(err13);
+          vErrors.push(err22);
         }
         errors++;
+      }
+    }
+    if (data.manifest_ref !== undefined && func0.call(data, "manifest_ref")) {
+      if (
+        !validate29(data.manifest_ref, {
+          instancePath: instancePath + "/manifest_ref",
+          parentData: data,
+          parentDataProperty: "manifest_ref",
+          rootData,
+          dynamicAnchors,
+        })
+      ) {
+        vErrors = vErrors === null ? validate29.errors : vErrors.concat(validate29.errors);
+        errors = vErrors.length;
       }
     }
     if (data.reviewer !== undefined && func0.call(data, "reviewer")) {
@@ -16333,7 +16562,7 @@ function validate141(
     }
     if (data.root_cause_eliminated !== undefined && func0.call(data, "root_cause_eliminated")) {
       if (typeof data.root_cause_eliminated !== "boolean") {
-        const err14 = {
+        const err23 = {
           instancePath: instancePath + "/root_cause_eliminated",
           schemaPath: "#/allOf/2/properties/root_cause_eliminated/type",
           keyword: "type",
@@ -16341,17 +16570,17 @@ function validate141(
           message: "must be boolean",
         };
         if (vErrors === null) {
-          vErrors = [err14];
+          vErrors = [err23];
         } else {
-          vErrors.push(err14);
+          vErrors.push(err23);
         }
         errors++;
       }
     }
     if (data.status !== undefined && func0.call(data, "status")) {
-      let data8 = data.status;
-      if (!(data8 === "fail" || data8 === "pass")) {
-        const err15 = {
+      let data12 = data.status;
+      if (!(data12 === "fail" || data12 === "pass")) {
+        const err24 = {
           instancePath: instancePath + "/status",
           schemaPath: "#/allOf/2/properties/status/enum",
           keyword: "enum",
@@ -16359,16 +16588,99 @@ function validate141(
           message: "must be equal to one of the allowed values",
         };
         if (vErrors === null) {
-          vErrors = [err15];
+          vErrors = [err24];
         } else {
-          vErrors.push(err15);
+          vErrors.push(err24);
+        }
+        errors++;
+      }
+    }
+    if (data.unresolved_gap_ids !== undefined && func0.call(data, "unresolved_gap_ids")) {
+      let data13 = data.unresolved_gap_ids;
+      if (Array.isArray(data13)) {
+        const len2 = data13.length;
+        for (let i3 = 0; i3 < len2; i3++) {
+          let data14 = data13[i3];
+          if (typeof data14 === "string") {
+            if (!pattern6.test(data14)) {
+              const err25 = {
+                instancePath: instancePath + "/unresolved_gap_ids/" + i3,
+                schemaPath: "#/$defs/opaque_id/pattern",
+                keyword: "pattern",
+                params: { pattern: "^[a-z][a-z0-9-]*:[A-Za-z0-9_-]{16,128}$" },
+                message: 'must match pattern "' + "^[a-z][a-z0-9-]*:[A-Za-z0-9_-]{16,128}$" + '"',
+              };
+              if (vErrors === null) {
+                vErrors = [err25];
+              } else {
+                vErrors.push(err25);
+              }
+              errors++;
+            }
+          } else {
+            const err26 = {
+              instancePath: instancePath + "/unresolved_gap_ids/" + i3,
+              schemaPath: "#/$defs/opaque_id/type",
+              keyword: "type",
+              params: { type: "string" },
+              message: "must be string",
+            };
+            if (vErrors === null) {
+              vErrors = [err26];
+            } else {
+              vErrors.push(err26);
+            }
+            errors++;
+          }
+        }
+        let i4 = data13.length;
+        let j1;
+        if (i4 > 1) {
+          outer1: for (; i4--; ) {
+            for (j1 = i4; j1--; ) {
+              if (func27(data13[i4], data13[j1])) {
+                const err27 = {
+                  instancePath: instancePath + "/unresolved_gap_ids",
+                  schemaPath: "#/allOf/2/properties/unresolved_gap_ids/uniqueItems",
+                  keyword: "uniqueItems",
+                  params: { i: i4, j: j1 },
+                  message:
+                    "must NOT have duplicate items (items ## " +
+                    j1 +
+                    " and " +
+                    i4 +
+                    " are identical)",
+                };
+                if (vErrors === null) {
+                  vErrors = [err27];
+                } else {
+                  vErrors.push(err27);
+                }
+                errors++;
+                break outer1;
+              }
+            }
+          }
+        }
+      } else {
+        const err28 = {
+          instancePath: instancePath + "/unresolved_gap_ids",
+          schemaPath: "#/allOf/2/properties/unresolved_gap_ids/type",
+          keyword: "type",
+          params: { type: "array" },
+          message: "must be array",
+        };
+        if (vErrors === null) {
+          vErrors = [err28];
+        } else {
+          vErrors.push(err28);
         }
         errors++;
       }
     }
     if (data.verification_sufficient !== undefined && func0.call(data, "verification_sufficient")) {
       if (typeof data.verification_sufficient !== "boolean") {
-        const err16 = {
+        const err29 = {
           instancePath: instancePath + "/verification_sufficient",
           schemaPath: "#/allOf/2/properties/verification_sufficient/type",
           keyword: "type",
@@ -16376,16 +16688,16 @@ function validate141(
           message: "must be boolean",
         };
         if (vErrors === null) {
-          vErrors = [err16];
+          vErrors = [err29];
         } else {
-          vErrors.push(err16);
+          vErrors.push(err29);
         }
         errors++;
       }
     }
     if (data.within_approved_scope !== undefined && func0.call(data, "within_approved_scope")) {
       if (typeof data.within_approved_scope !== "boolean") {
-        const err17 = {
+        const err30 = {
           instancePath: instancePath + "/within_approved_scope",
           schemaPath: "#/allOf/2/properties/within_approved_scope/type",
           keyword: "type",
@@ -16393,15 +16705,15 @@ function validate141(
           message: "must be boolean",
         };
         if (vErrors === null) {
-          vErrors = [err17];
+          vErrors = [err30];
         } else {
-          vErrors.push(err17);
+          vErrors.push(err30);
         }
         errors++;
       }
     }
   } else {
-    const err18 = {
+    const err31 = {
       instancePath,
       schemaPath: "#/allOf/2/type",
       keyword: "type",
@@ -16409,9 +16721,9 @@ function validate141(
       message: "must be object",
     };
     if (vErrors === null) {
-      vErrors = [err18];
+      vErrors = [err31];
     } else {
-      vErrors.push(err18);
+      vErrors.push(err31);
     }
     errors++;
   }
@@ -16420,11 +16732,16 @@ function validate141(
       if (
         key0 !== "artifact_type" &&
         key0 !== "candidate_ref" &&
+        key0 !== "builder_session_id" &&
         key0 !== "criterion_evidence_refs" &&
+        key0 !== "diff_content_digest" &&
+        key0 !== "diff_manifest_ref" &&
         key0 !== "findings" &&
+        key0 !== "manifest_ref" &&
         key0 !== "reviewer" &&
         key0 !== "root_cause_eliminated" &&
         key0 !== "status" &&
+        key0 !== "unresolved_gap_ids" &&
         key0 !== "verification_sufficient" &&
         key0 !== "within_approved_scope" &&
         key0 !== "workflow_id" &&
@@ -16432,7 +16749,7 @@ function validate141(
         key0 !== "artifact_version" &&
         key0 !== "created_at"
       ) {
-        const err19 = {
+        const err32 = {
           instancePath,
           schemaPath: "#/unevaluatedProperties",
           keyword: "unevaluatedProperties",
@@ -16440,15 +16757,15 @@ function validate141(
           message: "must NOT have unevaluated properties",
         };
         if (vErrors === null) {
-          vErrors = [err19];
+          vErrors = [err32];
         } else {
-          vErrors.push(err19);
+          vErrors.push(err32);
         }
         errors++;
       }
     }
   } else {
-    const err20 = {
+    const err33 = {
       instancePath,
       schemaPath: "#/type",
       keyword: "type",
@@ -16456,9 +16773,9 @@ function validate141(
       message: "must be object",
     };
     if (vErrors === null) {
-      vErrors = [err20];
+      vErrors = [err33];
     } else {
-      vErrors.push(err20);
+      vErrors.push(err33);
     }
     errors++;
   }
@@ -16467,7 +16784,7 @@ function validate141(
 }
 validate141.evaluated = { props: true, dynamicProps: false, dynamicItems: false };
 
-const schema165 = {
+const schema168 = {
   title: "Delivery",
   type: "object",
   allOf: [
@@ -16478,18 +16795,30 @@ const schema165 = {
       required: [
         "artifact_type",
         "candidate_ref",
+        "changed_paths",
         "criterion_evidence_refs",
         "delivery_patch_digest",
+        "diff_manifest_ref",
+        "follow_up_steps",
+        "human_criterion_ids",
+        "manifest_ref",
         "patch_review_ref",
         "plan_ref",
         "residual_risks",
         "root_cause_ref",
         "status",
         "summary",
+        "verified_criterion_ids",
       ],
       properties: {
         artifact_type: { const: "delivery" },
         candidate_ref: { $ref: "#/$defs/artifact_ref" },
+        changed_paths: {
+          type: "array",
+          minItems: 1,
+          uniqueItems: true,
+          items: { $ref: "#/$defs/relative_path" },
+        },
         criterion_evidence_refs: {
           type: "array",
           minItems: 1,
@@ -16497,6 +16826,18 @@ const schema165 = {
           items: { $ref: "#/$defs/artifact_ref" },
         },
         delivery_patch_digest: { $ref: "#/$defs/digest" },
+        diff_manifest_ref: { $ref: "#/$defs/artifact_ref" },
+        follow_up_steps: {
+          type: "array",
+          uniqueItems: true,
+          items: { $ref: "#/$defs/non_empty_string" },
+        },
+        human_criterion_ids: {
+          type: "array",
+          uniqueItems: true,
+          items: { $ref: "#/$defs/opaque_id" },
+        },
+        manifest_ref: { $ref: "#/$defs/artifact_ref" },
         patch_review_ref: { $ref: "#/$defs/artifact_ref" },
         plan_ref: { $ref: "#/$defs/artifact_ref" },
         residual_risks: {
@@ -16507,19 +16848,25 @@ const schema165 = {
         root_cause_ref: { $ref: "#/$defs/artifact_ref" },
         status: { const: "complete" },
         summary: { $ref: "#/$defs/non_empty_string" },
+        verified_criterion_ids: {
+          type: "array",
+          minItems: 1,
+          uniqueItems: true,
+          items: { $ref: "#/$defs/opaque_id" },
+        },
       },
     },
   ],
   unevaluatedProperties: false,
 };
 
-function validate150(
+function validate152(
   data,
   { instancePath = "", parentData, parentDataProperty, rootData = data, dynamicAnchors = {} } = {},
 ) {
   let vErrors = null;
   let errors = 0;
-  const evaluated0 = validate150.evaluated;
+  const evaluated0 = validate152.evaluated;
   if (evaluated0.dynamicProps) {
     evaluated0.props = undefined;
   }
@@ -16569,16 +16916,13 @@ function validate150(
       }
       errors++;
     }
-    if (
-      data.criterion_evidence_refs === undefined ||
-      !func0.call(data, "criterion_evidence_refs")
-    ) {
+    if (data.changed_paths === undefined || !func0.call(data, "changed_paths")) {
       const err2 = {
         instancePath,
         schemaPath: "#/allOf/2/required",
         keyword: "required",
-        params: { missingProperty: "criterion_evidence_refs" },
-        message: "must have required property '" + "criterion_evidence_refs" + "'",
+        params: { missingProperty: "changed_paths" },
+        message: "must have required property '" + "changed_paths" + "'",
       };
       if (vErrors === null) {
         vErrors = [err2];
@@ -16587,13 +16931,16 @@ function validate150(
       }
       errors++;
     }
-    if (data.delivery_patch_digest === undefined || !func0.call(data, "delivery_patch_digest")) {
+    if (
+      data.criterion_evidence_refs === undefined ||
+      !func0.call(data, "criterion_evidence_refs")
+    ) {
       const err3 = {
         instancePath,
         schemaPath: "#/allOf/2/required",
         keyword: "required",
-        params: { missingProperty: "delivery_patch_digest" },
-        message: "must have required property '" + "delivery_patch_digest" + "'",
+        params: { missingProperty: "criterion_evidence_refs" },
+        message: "must have required property '" + "criterion_evidence_refs" + "'",
       };
       if (vErrors === null) {
         vErrors = [err3];
@@ -16602,13 +16949,13 @@ function validate150(
       }
       errors++;
     }
-    if (data.patch_review_ref === undefined || !func0.call(data, "patch_review_ref")) {
+    if (data.delivery_patch_digest === undefined || !func0.call(data, "delivery_patch_digest")) {
       const err4 = {
         instancePath,
         schemaPath: "#/allOf/2/required",
         keyword: "required",
-        params: { missingProperty: "patch_review_ref" },
-        message: "must have required property '" + "patch_review_ref" + "'",
+        params: { missingProperty: "delivery_patch_digest" },
+        message: "must have required property '" + "delivery_patch_digest" + "'",
       };
       if (vErrors === null) {
         vErrors = [err4];
@@ -16617,13 +16964,13 @@ function validate150(
       }
       errors++;
     }
-    if (data.plan_ref === undefined || !func0.call(data, "plan_ref")) {
+    if (data.diff_manifest_ref === undefined || !func0.call(data, "diff_manifest_ref")) {
       const err5 = {
         instancePath,
         schemaPath: "#/allOf/2/required",
         keyword: "required",
-        params: { missingProperty: "plan_ref" },
-        message: "must have required property '" + "plan_ref" + "'",
+        params: { missingProperty: "diff_manifest_ref" },
+        message: "must have required property '" + "diff_manifest_ref" + "'",
       };
       if (vErrors === null) {
         vErrors = [err5];
@@ -16632,13 +16979,13 @@ function validate150(
       }
       errors++;
     }
-    if (data.residual_risks === undefined || !func0.call(data, "residual_risks")) {
+    if (data.follow_up_steps === undefined || !func0.call(data, "follow_up_steps")) {
       const err6 = {
         instancePath,
         schemaPath: "#/allOf/2/required",
         keyword: "required",
-        params: { missingProperty: "residual_risks" },
-        message: "must have required property '" + "residual_risks" + "'",
+        params: { missingProperty: "follow_up_steps" },
+        message: "must have required property '" + "follow_up_steps" + "'",
       };
       if (vErrors === null) {
         vErrors = [err6];
@@ -16647,13 +16994,13 @@ function validate150(
       }
       errors++;
     }
-    if (data.root_cause_ref === undefined || !func0.call(data, "root_cause_ref")) {
+    if (data.human_criterion_ids === undefined || !func0.call(data, "human_criterion_ids")) {
       const err7 = {
         instancePath,
         schemaPath: "#/allOf/2/required",
         keyword: "required",
-        params: { missingProperty: "root_cause_ref" },
-        message: "must have required property '" + "root_cause_ref" + "'",
+        params: { missingProperty: "human_criterion_ids" },
+        message: "must have required property '" + "human_criterion_ids" + "'",
       };
       if (vErrors === null) {
         vErrors = [err7];
@@ -16662,13 +17009,13 @@ function validate150(
       }
       errors++;
     }
-    if (data.status === undefined || !func0.call(data, "status")) {
+    if (data.manifest_ref === undefined || !func0.call(data, "manifest_ref")) {
       const err8 = {
         instancePath,
         schemaPath: "#/allOf/2/required",
         keyword: "required",
-        params: { missingProperty: "status" },
-        message: "must have required property '" + "status" + "'",
+        params: { missingProperty: "manifest_ref" },
+        message: "must have required property '" + "manifest_ref" + "'",
       };
       if (vErrors === null) {
         vErrors = [err8];
@@ -16677,13 +17024,13 @@ function validate150(
       }
       errors++;
     }
-    if (data.summary === undefined || !func0.call(data, "summary")) {
+    if (data.patch_review_ref === undefined || !func0.call(data, "patch_review_ref")) {
       const err9 = {
         instancePath,
         schemaPath: "#/allOf/2/required",
         keyword: "required",
-        params: { missingProperty: "summary" },
-        message: "must have required property '" + "summary" + "'",
+        params: { missingProperty: "patch_review_ref" },
+        message: "must have required property '" + "patch_review_ref" + "'",
       };
       if (vErrors === null) {
         vErrors = [err9];
@@ -16692,9 +17039,99 @@ function validate150(
       }
       errors++;
     }
+    if (data.plan_ref === undefined || !func0.call(data, "plan_ref")) {
+      const err10 = {
+        instancePath,
+        schemaPath: "#/allOf/2/required",
+        keyword: "required",
+        params: { missingProperty: "plan_ref" },
+        message: "must have required property '" + "plan_ref" + "'",
+      };
+      if (vErrors === null) {
+        vErrors = [err10];
+      } else {
+        vErrors.push(err10);
+      }
+      errors++;
+    }
+    if (data.residual_risks === undefined || !func0.call(data, "residual_risks")) {
+      const err11 = {
+        instancePath,
+        schemaPath: "#/allOf/2/required",
+        keyword: "required",
+        params: { missingProperty: "residual_risks" },
+        message: "must have required property '" + "residual_risks" + "'",
+      };
+      if (vErrors === null) {
+        vErrors = [err11];
+      } else {
+        vErrors.push(err11);
+      }
+      errors++;
+    }
+    if (data.root_cause_ref === undefined || !func0.call(data, "root_cause_ref")) {
+      const err12 = {
+        instancePath,
+        schemaPath: "#/allOf/2/required",
+        keyword: "required",
+        params: { missingProperty: "root_cause_ref" },
+        message: "must have required property '" + "root_cause_ref" + "'",
+      };
+      if (vErrors === null) {
+        vErrors = [err12];
+      } else {
+        vErrors.push(err12);
+      }
+      errors++;
+    }
+    if (data.status === undefined || !func0.call(data, "status")) {
+      const err13 = {
+        instancePath,
+        schemaPath: "#/allOf/2/required",
+        keyword: "required",
+        params: { missingProperty: "status" },
+        message: "must have required property '" + "status" + "'",
+      };
+      if (vErrors === null) {
+        vErrors = [err13];
+      } else {
+        vErrors.push(err13);
+      }
+      errors++;
+    }
+    if (data.summary === undefined || !func0.call(data, "summary")) {
+      const err14 = {
+        instancePath,
+        schemaPath: "#/allOf/2/required",
+        keyword: "required",
+        params: { missingProperty: "summary" },
+        message: "must have required property '" + "summary" + "'",
+      };
+      if (vErrors === null) {
+        vErrors = [err14];
+      } else {
+        vErrors.push(err14);
+      }
+      errors++;
+    }
+    if (data.verified_criterion_ids === undefined || !func0.call(data, "verified_criterion_ids")) {
+      const err15 = {
+        instancePath,
+        schemaPath: "#/allOf/2/required",
+        keyword: "required",
+        params: { missingProperty: "verified_criterion_ids" },
+        message: "must have required property '" + "verified_criterion_ids" + "'",
+      };
+      if (vErrors === null) {
+        vErrors = [err15];
+      } else {
+        vErrors.push(err15);
+      }
+      errors++;
+    }
     if (data.artifact_type !== undefined && func0.call(data, "artifact_type")) {
       if ("delivery" !== data.artifact_type) {
-        const err10 = {
+        const err16 = {
           instancePath: instancePath + "/artifact_type",
           schemaPath: "#/allOf/2/properties/artifact_type/const",
           keyword: "const",
@@ -16702,9 +17139,9 @@ function validate150(
           message: "must be equal to constant",
         };
         if (vErrors === null) {
-          vErrors = [err10];
+          vErrors = [err16];
         } else {
-          vErrors.push(err10);
+          vErrors.push(err16);
         }
         errors++;
       }
@@ -16723,37 +17160,77 @@ function validate150(
         errors = vErrors.length;
       }
     }
-    if (data.criterion_evidence_refs !== undefined && func0.call(data, "criterion_evidence_refs")) {
-      let data2 = data.criterion_evidence_refs;
+    if (data.changed_paths !== undefined && func0.call(data, "changed_paths")) {
+      let data2 = data.changed_paths;
       if (Array.isArray(data2)) {
         if (data2.length < 1) {
-          const err11 = {
-            instancePath: instancePath + "/criterion_evidence_refs",
-            schemaPath: "#/allOf/2/properties/criterion_evidence_refs/minItems",
+          const err17 = {
+            instancePath: instancePath + "/changed_paths",
+            schemaPath: "#/allOf/2/properties/changed_paths/minItems",
             keyword: "minItems",
             params: { limit: 1 },
             message: "must NOT have fewer than 1 items",
           };
           if (vErrors === null) {
-            vErrors = [err11];
+            vErrors = [err17];
           } else {
-            vErrors.push(err11);
+            vErrors.push(err17);
           }
           errors++;
         }
         const len0 = data2.length;
         for (let i0 = 0; i0 < len0; i0++) {
-          if (
-            !validate29(data2[i0], {
-              instancePath: instancePath + "/criterion_evidence_refs/" + i0,
-              parentData: data2,
-              parentDataProperty: i0,
-              rootData,
-              dynamicAnchors,
-            })
-          ) {
-            vErrors = vErrors === null ? validate29.errors : vErrors.concat(validate29.errors);
-            errors = vErrors.length;
+          let data3 = data2[i0];
+          if (typeof data3 === "string") {
+            if (func90(data3) < 1) {
+              const err18 = {
+                instancePath: instancePath + "/changed_paths/" + i0,
+                schemaPath: "#/$defs/relative_path/minLength",
+                keyword: "minLength",
+                params: { limit: 1 },
+                message: "must NOT have fewer than 1 characters",
+              };
+              if (vErrors === null) {
+                vErrors = [err18];
+              } else {
+                vErrors.push(err18);
+              }
+              errors++;
+            }
+            if (!pattern21.test(data3)) {
+              const err19 = {
+                instancePath: instancePath + "/changed_paths/" + i0,
+                schemaPath: "#/$defs/relative_path/pattern",
+                keyword: "pattern",
+                params: {
+                  pattern: "^(?!/)(?!.*(?:^|/)\\.\\.?(?:/|$))(?!.*//)(?!.*\\\\)[^\\u0000]+$",
+                },
+                message:
+                  'must match pattern "' +
+                  "^(?!/)(?!.*(?:^|/)\\.\\.?(?:/|$))(?!.*//)(?!.*\\\\)[^\\u0000]+$" +
+                  '"',
+              };
+              if (vErrors === null) {
+                vErrors = [err19];
+              } else {
+                vErrors.push(err19);
+              }
+              errors++;
+            }
+          } else {
+            const err20 = {
+              instancePath: instancePath + "/changed_paths/" + i0,
+              schemaPath: "#/$defs/relative_path/type",
+              keyword: "type",
+              params: { type: "string" },
+              message: "must be string",
+            };
+            if (vErrors === null) {
+              vErrors = [err20];
+            } else {
+              vErrors.push(err20);
+            }
+            errors++;
           }
         }
         let i1 = data2.length;
@@ -16762,9 +17239,9 @@ function validate150(
           outer0: for (; i1--; ) {
             for (j0 = i1; j0--; ) {
               if (func27(data2[i1], data2[j0])) {
-                const err12 = {
-                  instancePath: instancePath + "/criterion_evidence_refs",
-                  schemaPath: "#/allOf/2/properties/criterion_evidence_refs/uniqueItems",
+                const err21 = {
+                  instancePath: instancePath + "/changed_paths",
+                  schemaPath: "#/allOf/2/properties/changed_paths/uniqueItems",
                   keyword: "uniqueItems",
                   params: { i: i1, j: j0 },
                   message:
@@ -16775,9 +17252,9 @@ function validate150(
                     " are identical)",
                 };
                 if (vErrors === null) {
-                  vErrors = [err12];
+                  vErrors = [err21];
                 } else {
-                  vErrors.push(err12);
+                  vErrors.push(err21);
                 }
                 errors++;
                 break outer0;
@@ -16786,7 +17263,85 @@ function validate150(
           }
         }
       } else {
-        const err13 = {
+        const err22 = {
+          instancePath: instancePath + "/changed_paths",
+          schemaPath: "#/allOf/2/properties/changed_paths/type",
+          keyword: "type",
+          params: { type: "array" },
+          message: "must be array",
+        };
+        if (vErrors === null) {
+          vErrors = [err22];
+        } else {
+          vErrors.push(err22);
+        }
+        errors++;
+      }
+    }
+    if (data.criterion_evidence_refs !== undefined && func0.call(data, "criterion_evidence_refs")) {
+      let data4 = data.criterion_evidence_refs;
+      if (Array.isArray(data4)) {
+        if (data4.length < 1) {
+          const err23 = {
+            instancePath: instancePath + "/criterion_evidence_refs",
+            schemaPath: "#/allOf/2/properties/criterion_evidence_refs/minItems",
+            keyword: "minItems",
+            params: { limit: 1 },
+            message: "must NOT have fewer than 1 items",
+          };
+          if (vErrors === null) {
+            vErrors = [err23];
+          } else {
+            vErrors.push(err23);
+          }
+          errors++;
+        }
+        const len1 = data4.length;
+        for (let i2 = 0; i2 < len1; i2++) {
+          if (
+            !validate29(data4[i2], {
+              instancePath: instancePath + "/criterion_evidence_refs/" + i2,
+              parentData: data4,
+              parentDataProperty: i2,
+              rootData,
+              dynamicAnchors,
+            })
+          ) {
+            vErrors = vErrors === null ? validate29.errors : vErrors.concat(validate29.errors);
+            errors = vErrors.length;
+          }
+        }
+        let i3 = data4.length;
+        let j1;
+        if (i3 > 1) {
+          outer1: for (; i3--; ) {
+            for (j1 = i3; j1--; ) {
+              if (func27(data4[i3], data4[j1])) {
+                const err24 = {
+                  instancePath: instancePath + "/criterion_evidence_refs",
+                  schemaPath: "#/allOf/2/properties/criterion_evidence_refs/uniqueItems",
+                  keyword: "uniqueItems",
+                  params: { i: i3, j: j1 },
+                  message:
+                    "must NOT have duplicate items (items ## " +
+                    j1 +
+                    " and " +
+                    i3 +
+                    " are identical)",
+                };
+                if (vErrors === null) {
+                  vErrors = [err24];
+                } else {
+                  vErrors.push(err24);
+                }
+                errors++;
+                break outer1;
+              }
+            }
+          }
+        }
+      } else {
+        const err25 = {
           instancePath: instancePath + "/criterion_evidence_refs",
           schemaPath: "#/allOf/2/properties/criterion_evidence_refs/type",
           keyword: "type",
@@ -16794,18 +17349,18 @@ function validate150(
           message: "must be array",
         };
         if (vErrors === null) {
-          vErrors = [err13];
+          vErrors = [err25];
         } else {
-          vErrors.push(err13);
+          vErrors.push(err25);
         }
         errors++;
       }
     }
     if (data.delivery_patch_digest !== undefined && func0.call(data, "delivery_patch_digest")) {
-      let data4 = data.delivery_patch_digest;
-      if (typeof data4 === "string") {
-        if (!pattern4.test(data4)) {
-          const err14 = {
+      let data6 = data.delivery_patch_digest;
+      if (typeof data6 === "string") {
+        if (!pattern4.test(data6)) {
+          const err26 = {
             instancePath: instancePath + "/delivery_patch_digest",
             schemaPath: "#/$defs/digest/pattern",
             keyword: "pattern",
@@ -16813,14 +17368,14 @@ function validate150(
             message: 'must match pattern "' + "^sha256:[0-9a-f]{64}$" + '"',
           };
           if (vErrors === null) {
-            vErrors = [err14];
+            vErrors = [err26];
           } else {
-            vErrors.push(err14);
+            vErrors.push(err26);
           }
           errors++;
         }
       } else {
-        const err15 = {
+        const err27 = {
           instancePath: instancePath + "/delivery_patch_digest",
           schemaPath: "#/$defs/digest/type",
           keyword: "type",
@@ -16828,11 +17383,205 @@ function validate150(
           message: "must be string",
         };
         if (vErrors === null) {
-          vErrors = [err15];
+          vErrors = [err27];
         } else {
-          vErrors.push(err15);
+          vErrors.push(err27);
         }
         errors++;
+      }
+    }
+    if (data.diff_manifest_ref !== undefined && func0.call(data, "diff_manifest_ref")) {
+      if (
+        !validate29(data.diff_manifest_ref, {
+          instancePath: instancePath + "/diff_manifest_ref",
+          parentData: data,
+          parentDataProperty: "diff_manifest_ref",
+          rootData,
+          dynamicAnchors,
+        })
+      ) {
+        vErrors = vErrors === null ? validate29.errors : vErrors.concat(validate29.errors);
+        errors = vErrors.length;
+      }
+    }
+    if (data.follow_up_steps !== undefined && func0.call(data, "follow_up_steps")) {
+      let data8 = data.follow_up_steps;
+      if (Array.isArray(data8)) {
+        const len2 = data8.length;
+        for (let i4 = 0; i4 < len2; i4++) {
+          let data9 = data8[i4];
+          if (typeof data9 === "string") {
+            if (func90(data9) < 1) {
+              const err28 = {
+                instancePath: instancePath + "/follow_up_steps/" + i4,
+                schemaPath: "#/$defs/non_empty_string/minLength",
+                keyword: "minLength",
+                params: { limit: 1 },
+                message: "must NOT have fewer than 1 characters",
+              };
+              if (vErrors === null) {
+                vErrors = [err28];
+              } else {
+                vErrors.push(err28);
+              }
+              errors++;
+            }
+          } else {
+            const err29 = {
+              instancePath: instancePath + "/follow_up_steps/" + i4,
+              schemaPath: "#/$defs/non_empty_string/type",
+              keyword: "type",
+              params: { type: "string" },
+              message: "must be string",
+            };
+            if (vErrors === null) {
+              vErrors = [err29];
+            } else {
+              vErrors.push(err29);
+            }
+            errors++;
+          }
+        }
+        let i5 = data8.length;
+        let j2;
+        if (i5 > 1) {
+          outer2: for (; i5--; ) {
+            for (j2 = i5; j2--; ) {
+              if (func27(data8[i5], data8[j2])) {
+                const err30 = {
+                  instancePath: instancePath + "/follow_up_steps",
+                  schemaPath: "#/allOf/2/properties/follow_up_steps/uniqueItems",
+                  keyword: "uniqueItems",
+                  params: { i: i5, j: j2 },
+                  message:
+                    "must NOT have duplicate items (items ## " +
+                    j2 +
+                    " and " +
+                    i5 +
+                    " are identical)",
+                };
+                if (vErrors === null) {
+                  vErrors = [err30];
+                } else {
+                  vErrors.push(err30);
+                }
+                errors++;
+                break outer2;
+              }
+            }
+          }
+        }
+      } else {
+        const err31 = {
+          instancePath: instancePath + "/follow_up_steps",
+          schemaPath: "#/allOf/2/properties/follow_up_steps/type",
+          keyword: "type",
+          params: { type: "array" },
+          message: "must be array",
+        };
+        if (vErrors === null) {
+          vErrors = [err31];
+        } else {
+          vErrors.push(err31);
+        }
+        errors++;
+      }
+    }
+    if (data.human_criterion_ids !== undefined && func0.call(data, "human_criterion_ids")) {
+      let data10 = data.human_criterion_ids;
+      if (Array.isArray(data10)) {
+        const len3 = data10.length;
+        for (let i6 = 0; i6 < len3; i6++) {
+          let data11 = data10[i6];
+          if (typeof data11 === "string") {
+            if (!pattern6.test(data11)) {
+              const err32 = {
+                instancePath: instancePath + "/human_criterion_ids/" + i6,
+                schemaPath: "#/$defs/opaque_id/pattern",
+                keyword: "pattern",
+                params: { pattern: "^[a-z][a-z0-9-]*:[A-Za-z0-9_-]{16,128}$" },
+                message: 'must match pattern "' + "^[a-z][a-z0-9-]*:[A-Za-z0-9_-]{16,128}$" + '"',
+              };
+              if (vErrors === null) {
+                vErrors = [err32];
+              } else {
+                vErrors.push(err32);
+              }
+              errors++;
+            }
+          } else {
+            const err33 = {
+              instancePath: instancePath + "/human_criterion_ids/" + i6,
+              schemaPath: "#/$defs/opaque_id/type",
+              keyword: "type",
+              params: { type: "string" },
+              message: "must be string",
+            };
+            if (vErrors === null) {
+              vErrors = [err33];
+            } else {
+              vErrors.push(err33);
+            }
+            errors++;
+          }
+        }
+        let i7 = data10.length;
+        let j3;
+        if (i7 > 1) {
+          outer3: for (; i7--; ) {
+            for (j3 = i7; j3--; ) {
+              if (func27(data10[i7], data10[j3])) {
+                const err34 = {
+                  instancePath: instancePath + "/human_criterion_ids",
+                  schemaPath: "#/allOf/2/properties/human_criterion_ids/uniqueItems",
+                  keyword: "uniqueItems",
+                  params: { i: i7, j: j3 },
+                  message:
+                    "must NOT have duplicate items (items ## " +
+                    j3 +
+                    " and " +
+                    i7 +
+                    " are identical)",
+                };
+                if (vErrors === null) {
+                  vErrors = [err34];
+                } else {
+                  vErrors.push(err34);
+                }
+                errors++;
+                break outer3;
+              }
+            }
+          }
+        }
+      } else {
+        const err35 = {
+          instancePath: instancePath + "/human_criterion_ids",
+          schemaPath: "#/allOf/2/properties/human_criterion_ids/type",
+          keyword: "type",
+          params: { type: "array" },
+          message: "must be array",
+        };
+        if (vErrors === null) {
+          vErrors = [err35];
+        } else {
+          vErrors.push(err35);
+        }
+        errors++;
+      }
+    }
+    if (data.manifest_ref !== undefined && func0.call(data, "manifest_ref")) {
+      if (
+        !validate29(data.manifest_ref, {
+          instancePath: instancePath + "/manifest_ref",
+          parentData: data,
+          parentDataProperty: "manifest_ref",
+          rootData,
+          dynamicAnchors,
+        })
+      ) {
+        vErrors = vErrors === null ? validate29.errors : vErrors.concat(validate29.errors);
+        errors = vErrors.length;
       }
     }
     if (data.patch_review_ref !== undefined && func0.call(data, "patch_review_ref")) {
@@ -16864,74 +17613,74 @@ function validate150(
       }
     }
     if (data.residual_risks !== undefined && func0.call(data, "residual_risks")) {
-      let data7 = data.residual_risks;
-      if (Array.isArray(data7)) {
-        const len1 = data7.length;
-        for (let i2 = 0; i2 < len1; i2++) {
-          let data8 = data7[i2];
-          if (typeof data8 === "string") {
-            if (func90(data8) < 1) {
-              const err16 = {
-                instancePath: instancePath + "/residual_risks/" + i2,
+      let data15 = data.residual_risks;
+      if (Array.isArray(data15)) {
+        const len4 = data15.length;
+        for (let i8 = 0; i8 < len4; i8++) {
+          let data16 = data15[i8];
+          if (typeof data16 === "string") {
+            if (func90(data16) < 1) {
+              const err36 = {
+                instancePath: instancePath + "/residual_risks/" + i8,
                 schemaPath: "#/$defs/non_empty_string/minLength",
                 keyword: "minLength",
                 params: { limit: 1 },
                 message: "must NOT have fewer than 1 characters",
               };
               if (vErrors === null) {
-                vErrors = [err16];
+                vErrors = [err36];
               } else {
-                vErrors.push(err16);
+                vErrors.push(err36);
               }
               errors++;
             }
           } else {
-            const err17 = {
-              instancePath: instancePath + "/residual_risks/" + i2,
+            const err37 = {
+              instancePath: instancePath + "/residual_risks/" + i8,
               schemaPath: "#/$defs/non_empty_string/type",
               keyword: "type",
               params: { type: "string" },
               message: "must be string",
             };
             if (vErrors === null) {
-              vErrors = [err17];
+              vErrors = [err37];
             } else {
-              vErrors.push(err17);
+              vErrors.push(err37);
             }
             errors++;
           }
         }
-        let i3 = data7.length;
-        let j1;
-        if (i3 > 1) {
-          outer1: for (; i3--; ) {
-            for (j1 = i3; j1--; ) {
-              if (func27(data7[i3], data7[j1])) {
-                const err18 = {
+        let i9 = data15.length;
+        let j4;
+        if (i9 > 1) {
+          outer4: for (; i9--; ) {
+            for (j4 = i9; j4--; ) {
+              if (func27(data15[i9], data15[j4])) {
+                const err38 = {
                   instancePath: instancePath + "/residual_risks",
                   schemaPath: "#/allOf/2/properties/residual_risks/uniqueItems",
                   keyword: "uniqueItems",
-                  params: { i: i3, j: j1 },
+                  params: { i: i9, j: j4 },
                   message:
                     "must NOT have duplicate items (items ## " +
-                    j1 +
+                    j4 +
                     " and " +
-                    i3 +
+                    i9 +
                     " are identical)",
                 };
                 if (vErrors === null) {
-                  vErrors = [err18];
+                  vErrors = [err38];
                 } else {
-                  vErrors.push(err18);
+                  vErrors.push(err38);
                 }
                 errors++;
-                break outer1;
+                break outer4;
               }
             }
           }
         }
       } else {
-        const err19 = {
+        const err39 = {
           instancePath: instancePath + "/residual_risks",
           schemaPath: "#/allOf/2/properties/residual_risks/type",
           keyword: "type",
@@ -16939,9 +17688,9 @@ function validate150(
           message: "must be array",
         };
         if (vErrors === null) {
-          vErrors = [err19];
+          vErrors = [err39];
         } else {
-          vErrors.push(err19);
+          vErrors.push(err39);
         }
         errors++;
       }
@@ -16962,7 +17711,7 @@ function validate150(
     }
     if (data.status !== undefined && func0.call(data, "status")) {
       if ("complete" !== data.status) {
-        const err20 = {
+        const err40 = {
           instancePath: instancePath + "/status",
           schemaPath: "#/allOf/2/properties/status/const",
           keyword: "const",
@@ -16970,18 +17719,18 @@ function validate150(
           message: "must be equal to constant",
         };
         if (vErrors === null) {
-          vErrors = [err20];
+          vErrors = [err40];
         } else {
-          vErrors.push(err20);
+          vErrors.push(err40);
         }
         errors++;
       }
     }
     if (data.summary !== undefined && func0.call(data, "summary")) {
-      let data11 = data.summary;
-      if (typeof data11 === "string") {
-        if (func90(data11) < 1) {
-          const err21 = {
+      let data19 = data.summary;
+      if (typeof data19 === "string") {
+        if (func90(data19) < 1) {
+          const err41 = {
             instancePath: instancePath + "/summary",
             schemaPath: "#/$defs/non_empty_string/minLength",
             keyword: "minLength",
@@ -16989,14 +17738,14 @@ function validate150(
             message: "must NOT have fewer than 1 characters",
           };
           if (vErrors === null) {
-            vErrors = [err21];
+            vErrors = [err41];
           } else {
-            vErrors.push(err21);
+            vErrors.push(err41);
           }
           errors++;
         }
       } else {
-        const err22 = {
+        const err42 = {
           instancePath: instancePath + "/summary",
           schemaPath: "#/$defs/non_empty_string/type",
           keyword: "type",
@@ -17004,15 +17753,113 @@ function validate150(
           message: "must be string",
         };
         if (vErrors === null) {
-          vErrors = [err22];
+          vErrors = [err42];
         } else {
-          vErrors.push(err22);
+          vErrors.push(err42);
+        }
+        errors++;
+      }
+    }
+    if (data.verified_criterion_ids !== undefined && func0.call(data, "verified_criterion_ids")) {
+      let data20 = data.verified_criterion_ids;
+      if (Array.isArray(data20)) {
+        if (data20.length < 1) {
+          const err43 = {
+            instancePath: instancePath + "/verified_criterion_ids",
+            schemaPath: "#/allOf/2/properties/verified_criterion_ids/minItems",
+            keyword: "minItems",
+            params: { limit: 1 },
+            message: "must NOT have fewer than 1 items",
+          };
+          if (vErrors === null) {
+            vErrors = [err43];
+          } else {
+            vErrors.push(err43);
+          }
+          errors++;
+        }
+        const len5 = data20.length;
+        for (let i10 = 0; i10 < len5; i10++) {
+          let data21 = data20[i10];
+          if (typeof data21 === "string") {
+            if (!pattern6.test(data21)) {
+              const err44 = {
+                instancePath: instancePath + "/verified_criterion_ids/" + i10,
+                schemaPath: "#/$defs/opaque_id/pattern",
+                keyword: "pattern",
+                params: { pattern: "^[a-z][a-z0-9-]*:[A-Za-z0-9_-]{16,128}$" },
+                message: 'must match pattern "' + "^[a-z][a-z0-9-]*:[A-Za-z0-9_-]{16,128}$" + '"',
+              };
+              if (vErrors === null) {
+                vErrors = [err44];
+              } else {
+                vErrors.push(err44);
+              }
+              errors++;
+            }
+          } else {
+            const err45 = {
+              instancePath: instancePath + "/verified_criterion_ids/" + i10,
+              schemaPath: "#/$defs/opaque_id/type",
+              keyword: "type",
+              params: { type: "string" },
+              message: "must be string",
+            };
+            if (vErrors === null) {
+              vErrors = [err45];
+            } else {
+              vErrors.push(err45);
+            }
+            errors++;
+          }
+        }
+        let i11 = data20.length;
+        let j5;
+        if (i11 > 1) {
+          outer5: for (; i11--; ) {
+            for (j5 = i11; j5--; ) {
+              if (func27(data20[i11], data20[j5])) {
+                const err46 = {
+                  instancePath: instancePath + "/verified_criterion_ids",
+                  schemaPath: "#/allOf/2/properties/verified_criterion_ids/uniqueItems",
+                  keyword: "uniqueItems",
+                  params: { i: i11, j: j5 },
+                  message:
+                    "must NOT have duplicate items (items ## " +
+                    j5 +
+                    " and " +
+                    i11 +
+                    " are identical)",
+                };
+                if (vErrors === null) {
+                  vErrors = [err46];
+                } else {
+                  vErrors.push(err46);
+                }
+                errors++;
+                break outer5;
+              }
+            }
+          }
+        }
+      } else {
+        const err47 = {
+          instancePath: instancePath + "/verified_criterion_ids",
+          schemaPath: "#/allOf/2/properties/verified_criterion_ids/type",
+          keyword: "type",
+          params: { type: "array" },
+          message: "must be array",
+        };
+        if (vErrors === null) {
+          vErrors = [err47];
+        } else {
+          vErrors.push(err47);
         }
         errors++;
       }
     }
   } else {
-    const err23 = {
+    const err48 = {
       instancePath,
       schemaPath: "#/allOf/2/type",
       keyword: "type",
@@ -17020,9 +17867,9 @@ function validate150(
       message: "must be object",
     };
     if (vErrors === null) {
-      vErrors = [err23];
+      vErrors = [err48];
     } else {
-      vErrors.push(err23);
+      vErrors.push(err48);
     }
     errors++;
   }
@@ -17031,20 +17878,26 @@ function validate150(
       if (
         key0 !== "artifact_type" &&
         key0 !== "candidate_ref" &&
+        key0 !== "changed_paths" &&
         key0 !== "criterion_evidence_refs" &&
         key0 !== "delivery_patch_digest" &&
+        key0 !== "diff_manifest_ref" &&
+        key0 !== "follow_up_steps" &&
+        key0 !== "human_criterion_ids" &&
+        key0 !== "manifest_ref" &&
         key0 !== "patch_review_ref" &&
         key0 !== "plan_ref" &&
         key0 !== "residual_risks" &&
         key0 !== "root_cause_ref" &&
         key0 !== "status" &&
         key0 !== "summary" &&
+        key0 !== "verified_criterion_ids" &&
         key0 !== "workflow_id" &&
         key0 !== "artifact_digest" &&
         key0 !== "artifact_version" &&
         key0 !== "created_at"
       ) {
-        const err24 = {
+        const err49 = {
           instancePath,
           schemaPath: "#/unevaluatedProperties",
           keyword: "unevaluatedProperties",
@@ -17052,15 +17905,15 @@ function validate150(
           message: "must NOT have unevaluated properties",
         };
         if (vErrors === null) {
-          vErrors = [err24];
+          vErrors = [err49];
         } else {
-          vErrors.push(err24);
+          vErrors.push(err49);
         }
         errors++;
       }
     }
   } else {
-    const err25 = {
+    const err50 = {
       instancePath,
       schemaPath: "#/type",
       keyword: "type",
@@ -17068,18 +17921,18 @@ function validate150(
       message: "must be object",
     };
     if (vErrors === null) {
-      vErrors = [err25];
+      vErrors = [err50];
     } else {
-      vErrors.push(err25);
+      vErrors.push(err50);
     }
     errors++;
   }
-  validate150.errors = vErrors;
+  validate152.errors = vErrors;
   return errors === 0;
 }
-validate150.evaluated = { props: true, dynamicProps: false, dynamicItems: false };
+validate152.evaluated = { props: true, dynamicProps: false, dynamicItems: false };
 
-const schema169 = {
+const schema176 = {
   title: "WorkflowState",
   type: "object",
   allOf: [
@@ -17143,7 +17996,7 @@ const schema169 = {
   ],
   unevaluatedProperties: false,
 };
-const schema170 = {
+const schema177 = {
   title: "BlockedWorkflowContext",
   type: "object",
   additionalProperties: false,
@@ -17165,13 +18018,13 @@ const schema170 = {
   },
 };
 
-function validate163(
+function validate167(
   data,
   { instancePath = "", parentData, parentDataProperty, rootData = data, dynamicAnchors = {} } = {},
 ) {
   let vErrors = null;
   let errors = 0;
-  const evaluated0 = validate163.evaluated;
+  const evaluated0 = validate167.evaluated;
   if (evaluated0.dynamicProps) {
     evaluated0.props = undefined;
   }
@@ -17258,7 +18111,7 @@ function validate163(
           instancePath: instancePath + "/from_phase",
           schemaPath: "#/properties/from_phase/enum",
           keyword: "enum",
-          params: { allowedValues: schema170.properties.from_phase.enum },
+          params: { allowedValues: schema177.properties.from_phase.enum },
           message: "must be equal to one of the allowed values",
         };
         if (vErrors === null) {
@@ -17317,7 +18170,7 @@ function validate163(
           instancePath: instancePath + "/remediation_phase",
           schemaPath: "#/properties/remediation_phase/enum",
           keyword: "enum",
-          params: { allowedValues: schema170.properties.remediation_phase.enum },
+          params: { allowedValues: schema177.properties.remediation_phase.enum },
           message: "must be equal to one of the allowed values",
         };
         if (vErrors === null) {
@@ -17343,12 +18196,12 @@ function validate163(
     }
     errors++;
   }
-  validate163.errors = vErrors;
+  validate167.errors = vErrors;
   return errors === 0;
 }
-validate163.evaluated = { props: true, dynamicProps: false, dynamicItems: false };
+validate167.evaluated = { props: true, dynamicProps: false, dynamicItems: false };
 
-const schema173 = {
+const schema180 = {
   title: "WorkflowEntryContext",
   oneOf: [
     {
@@ -17382,13 +18235,13 @@ const schema173 = {
   ],
 };
 
-function validate166(
+function validate170(
   data,
   { instancePath = "", parentData, parentDataProperty, rootData = data, dynamicAnchors = {} } = {},
 ) {
   let vErrors = null;
   let errors = 0;
-  const evaluated0 = validate166.evaluated;
+  const evaluated0 = validate170.evaluated;
   if (evaluated0.dynamicProps) {
     evaluated0.props = undefined;
   }
@@ -17775,19 +18628,19 @@ function validate166(
       }
     }
   }
-  validate166.errors = vErrors;
+  validate170.errors = vErrors;
   evaluated0.props = props0;
   return errors === 0;
 }
-validate166.evaluated = { dynamicProps: true, dynamicItems: false };
+validate170.evaluated = { dynamicProps: true, dynamicItems: false };
 
-function validate159(
+function validate163(
   data,
   { instancePath = "", parentData, parentDataProperty, rootData = data, dynamicAnchors = {} } = {},
 ) {
   let vErrors = null;
   let errors = 0;
-  const evaluated0 = validate159.evaluated;
+  const evaluated0 = validate163.evaluated;
   if (evaluated0.dynamicProps) {
     evaluated0.props = undefined;
   }
@@ -18104,7 +18957,7 @@ function validate159(
       let passing0 = null;
       const _errs11 = errors;
       if (
-        !validate163(data3, {
+        !validate167(data3, {
           instancePath: instancePath + "/blocked_context",
           parentData: data,
           parentDataProperty: "blocked_context",
@@ -18112,7 +18965,7 @@ function validate159(
           dynamicAnchors,
         })
       ) {
-        vErrors = vErrors === null ? validate163.errors : vErrors.concat(validate163.errors);
+        vErrors = vErrors === null ? validate167.errors : vErrors.concat(validate167.errors);
         errors = vErrors.length;
       }
       var _valid0 = _errs11 === errors;
@@ -18300,7 +19153,7 @@ function validate159(
     }
     if (data.entry_context !== undefined && func0.call(data, "entry_context")) {
       if (
-        !validate166(data.entry_context, {
+        !validate170(data.entry_context, {
           instancePath: instancePath + "/entry_context",
           parentData: data,
           parentDataProperty: "entry_context",
@@ -18308,7 +19161,7 @@ function validate159(
           dynamicAnchors,
         })
       ) {
-        vErrors = vErrors === null ? validate166.errors : vErrors.concat(validate166.errors);
+        vErrors = vErrors === null ? validate170.errors : vErrors.concat(validate170.errors);
         errors = vErrors.length;
       }
     }
@@ -18319,7 +19172,7 @@ function validate159(
           instancePath: instancePath + "/entry_strategy",
           schemaPath: "#/allOf/2/properties/entry_strategy/enum",
           keyword: "enum",
-          params: { allowedValues: schema169.allOf[2].properties.entry_strategy.enum },
+          params: { allowedValues: schema176.allOf[2].properties.entry_strategy.enum },
           message: "must be equal to one of the allowed values",
         };
         if (vErrors === null) {
@@ -18349,7 +19202,7 @@ function validate159(
           instancePath: instancePath + "/phase",
           schemaPath: "#/allOf/2/properties/phase/enum",
           keyword: "enum",
-          params: { allowedValues: schema169.allOf[2].properties.phase.enum },
+          params: { allowedValues: schema176.allOf[2].properties.phase.enum },
           message: "must be equal to one of the allowed values",
         };
         if (vErrors === null) {
@@ -18588,7 +19441,7 @@ function validate159(
           instancePath: instancePath + "/status",
           schemaPath: "#/allOf/2/properties/status/enum",
           keyword: "enum",
-          params: { allowedValues: schema169.allOf[2].properties.status.enum },
+          params: { allowedValues: schema176.allOf[2].properties.status.enum },
           message: "must be equal to one of the allowed values",
         };
         if (vErrors === null) {
@@ -18720,12 +19573,12 @@ function validate159(
     }
     errors++;
   }
-  validate159.errors = vErrors;
+  validate163.errors = vErrors;
   return errors === 0;
 }
-validate159.evaluated = { props: true, dynamicProps: false, dynamicItems: false };
+validate163.evaluated = { props: true, dynamicProps: false, dynamicItems: false };
 
-const schema176 = {
+const schema183 = {
   title: "ActionJournal",
   type: "object",
   allOf: [
@@ -18743,7 +19596,7 @@ const schema176 = {
   ],
   unevaluatedProperties: false,
 };
-const schema177 = {
+const schema184 = {
   title: "ActionJournalEntry",
   type: "object",
   additionalProperties: false,
@@ -18757,15 +19610,15 @@ const schema177 = {
     subject_refs: { type: "array", uniqueItems: true, items: { $ref: "#/$defs/artifact_ref" } },
   },
 };
-const pattern98 = new RegExp("^ys_craft_[a-z][a-z0-9]*(?:_[a-z0-9]+)*$", "u");
+const pattern104 = new RegExp("^ys_craft_[a-z][a-z0-9]*(?:_[a-z0-9]+)*$", "u");
 
-function validate180(
+function validate184(
   data,
   { instancePath = "", parentData, parentDataProperty, rootData = data, dynamicAnchors = {} } = {},
 ) {
   let vErrors = null;
   let errors = 0;
-  const evaluated0 = validate180.evaluated;
+  const evaluated0 = validate184.evaluated;
   if (evaluated0.dynamicProps) {
     evaluated0.props = undefined;
   }
@@ -18892,7 +19745,7 @@ function validate180(
     if (data.action !== undefined && func0.call(data, "action")) {
       let data0 = data.action;
       if (typeof data0 === "string") {
-        if (!pattern98.test(data0)) {
+        if (!pattern104.test(data0)) {
           const err7 = {
             instancePath: instancePath + "/action",
             schemaPath: "#/properties/action/pattern",
@@ -19006,7 +19859,7 @@ function validate180(
           instancePath: instancePath + "/result",
           schemaPath: "#/properties/result/enum",
           keyword: "enum",
-          params: { allowedValues: schema177.properties.result.enum },
+          params: { allowedValues: schema184.properties.result.enum },
           message: "must be equal to one of the allowed values",
         };
         if (vErrors === null) {
@@ -19130,18 +19983,18 @@ function validate180(
     }
     errors++;
   }
-  validate180.errors = vErrors;
+  validate184.errors = vErrors;
   return errors === 0;
 }
-validate180.evaluated = { props: true, dynamicProps: false, dynamicItems: false };
+validate184.evaluated = { props: true, dynamicProps: false, dynamicItems: false };
 
-function validate177(
+function validate181(
   data,
   { instancePath = "", parentData, parentDataProperty, rootData = data, dynamicAnchors = {} } = {},
 ) {
   let vErrors = null;
   let errors = 0;
-  const evaluated0 = validate177.evaluated;
+  const evaluated0 = validate181.evaluated;
   if (evaluated0.dynamicProps) {
     evaluated0.props = undefined;
   }
@@ -19229,7 +20082,7 @@ function validate177(
         const len0 = data1.length;
         for (let i0 = 0; i0 < len0; i0++) {
           if (
-            !validate180(data1[i0], {
+            !validate184(data1[i0], {
               instancePath: instancePath + "/entries/" + i0,
               parentData: data1,
               parentDataProperty: i0,
@@ -19237,7 +20090,7 @@ function validate177(
               dynamicAnchors,
             })
           ) {
-            vErrors = vErrors === null ? validate180.errors : vErrors.concat(validate180.errors);
+            vErrors = vErrors === null ? validate184.errors : vErrors.concat(validate184.errors);
             errors = vErrors.length;
           }
         }
@@ -19348,10 +20201,10 @@ function validate177(
     }
     errors++;
   }
-  validate177.errors = vErrors;
+  validate181.errors = vErrors;
   return errors === 0;
 }
-validate177.evaluated = { props: true, dynamicProps: false, dynamicItems: false };
+validate181.evaluated = { props: true, dynamicProps: false, dynamicItems: false };
 
 function validate20(
   data,
@@ -19738,7 +20591,7 @@ function validate20(
                               }
                               const _errs16 = errors;
                               if (
-                                !validate150(data, {
+                                !validate152(data, {
                                   instancePath,
                                   parentData,
                                   parentDataProperty,
@@ -19748,8 +20601,8 @@ function validate20(
                               ) {
                                 vErrors =
                                   vErrors === null
-                                    ? validate150.errors
-                                    : vErrors.concat(validate150.errors);
+                                    ? validate152.errors
+                                    : vErrors.concat(validate152.errors);
                                 errors = vErrors.length;
                               }
                               var _valid0 = _errs16 === errors;
@@ -19766,7 +20619,7 @@ function validate20(
                                 }
                                 const _errs17 = errors;
                                 if (
-                                  !validate159(data, {
+                                  !validate163(data, {
                                     instancePath,
                                     parentData,
                                     parentDataProperty,
@@ -19776,8 +20629,8 @@ function validate20(
                                 ) {
                                   vErrors =
                                     vErrors === null
-                                      ? validate159.errors
-                                      : vErrors.concat(validate159.errors);
+                                      ? validate163.errors
+                                      : vErrors.concat(validate163.errors);
                                   errors = vErrors.length;
                                 }
                                 var _valid0 = _errs17 === errors;
@@ -19794,7 +20647,7 @@ function validate20(
                                   }
                                   const _errs18 = errors;
                                   if (
-                                    !validate177(data, {
+                                    !validate181(data, {
                                       instancePath,
                                       parentData,
                                       parentDataProperty,
@@ -19804,8 +20657,8 @@ function validate20(
                                   ) {
                                     vErrors =
                                       vErrors === null
-                                        ? validate177.errors
-                                        : vErrors.concat(validate177.errors);
+                                        ? validate181.errors
+                                        : vErrors.concat(validate181.errors);
                                     errors = vErrors.length;
                                   }
                                   var _valid0 = _errs18 === errors;

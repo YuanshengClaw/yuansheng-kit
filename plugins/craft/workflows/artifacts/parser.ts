@@ -426,6 +426,8 @@ function assertContractSemantics(contract: YuanshengCraftContractV1): void {
       break;
     case "patch-review":
       assertRefType(contract.candidate_ref, "patch-candidate");
+      assertRefType(contract.diff_manifest_ref, "diff-manifest");
+      assertRefType(contract.manifest_ref, "verification-manifest");
       for (const ref of contract.criterion_evidence_refs) {
         assertRefType(ref, "criterion-evidence");
       }
@@ -447,6 +449,8 @@ function assertContractSemantics(contract: YuanshengCraftContractV1): void {
       assertRefType(contract.root_cause_ref, "root-cause");
       assertRefType(contract.plan_ref, "patch-plan");
       assertRefType(contract.candidate_ref, "patch-candidate");
+      assertRefType(contract.diff_manifest_ref, "diff-manifest");
+      assertRefType(contract.manifest_ref, "verification-manifest");
       assertRefType(contract.patch_review_ref, "patch-review");
       for (const ref of contract.criterion_evidence_refs) {
         assertRefType(ref, "criterion-evidence");
@@ -977,39 +981,118 @@ export function validateCraftContractGraph(
           "Verification authorization must bind the exact manifest candidate and verifier",
         );
       }
-    } else if (contract.artifact_type === "patch-review" && contract.status === "pass") {
+    } else if (contract.artifact_type === "patch-review") {
       const candidate = getContract(index, contract.candidate_ref, "patch-candidate");
-      const mutation = contracts.find(
-        (item) =>
-          item.artifact_type === "mutation-authorization" &&
-          item.plan_ref.digest === candidate.plan_ref.digest,
+      const diff = getContract(index, contract.diff_manifest_ref, "diff-manifest");
+      const manifest = getContract(index, contract.manifest_ref, "verification-manifest");
+      const plan = getContract(index, candidate.plan_ref, "patch-plan");
+      const rootCause = getContract(index, plan.root_cause_ref, "root-cause");
+      const mutation = getContract(
+        index,
+        diff.mutation_authorization_ref,
+        "mutation-authorization",
       );
       if (
-        mutation?.artifact_type === "mutation-authorization" &&
+        contract.reviewer.agent_id !== "ys-craft-patch-reviewer" ||
+        mutation.principal.session_id !== contract.builder_session_id ||
         mutation.principal.session_id === contract.reviewer.session_id
       ) {
         fail("semantic-invalid", "Patch reviewer must use a distinct real session");
       }
+      if (
+        candidate.diff_manifest_ref.digest !== diff.artifact_digest ||
+        candidate.diff_content_digest !== contract.diff_content_digest ||
+        diff.diff_content_digest !== contract.diff_content_digest ||
+        manifest.candidate_ref.digest !== candidate.artifact_digest
+      ) {
+        fail("reference-mismatch", "Patch review does not bind the exact candidate diff manifest");
+      }
+      const expectedGapIds = rootCause.gaps.map((gap) => gap.id).sort();
+      const actualGapIds = [...contract.unresolved_gap_ids].sort();
+      if (
+        expectedGapIds.length !== actualGapIds.length ||
+        expectedGapIds.some((gapId, gapIndex) => gapId !== actualGapIds[gapIndex])
+      ) {
+        fail("reference-mismatch", "Patch review must preserve every unresolved root-cause gap");
+      }
+      const evidenceByCriterion = new Map<string, CriterionEvidence[]>();
       for (const ref of contract.criterion_evidence_refs) {
         const evidence = getContract(index, ref, "criterion-evidence");
-        if (evidence.candidate_ref.digest !== candidate.artifact_digest) {
-          fail("reference-mismatch", "Patch review evidence binds a different candidate");
+        if (
+          evidence.candidate_ref.digest !== candidate.artifact_digest ||
+          evidence.manifest_ref.digest !== manifest.artifact_digest
+        ) {
+          fail("reference-mismatch", "Patch review evidence binds a different candidate manifest");
+        }
+        const existing = evidenceByCriterion.get(evidence.criterion_id) ?? [];
+        existing.push(evidence);
+        evidenceByCriterion.set(evidence.criterion_id, existing);
+      }
+      for (const criterion of rootCause.criteria.filter((item) => item.required)) {
+        const matching = evidenceByCriterion.get(criterion.id) ?? [];
+        if (matching.length !== 1 || matching[0]?.status !== "pass") {
+          fail(
+            "reference-mismatch",
+            `Patch review requires one passing evidence artifact for ${criterion.id}`,
+          );
         }
       }
     } else if (contract.artifact_type === "delivery") {
       const review = getContract(index, contract.patch_review_ref, "patch-review");
       const candidate = getContract(index, contract.candidate_ref, "patch-candidate");
+      const diff = getContract(index, contract.diff_manifest_ref, "diff-manifest");
+      const manifest = getContract(index, contract.manifest_ref, "verification-manifest");
+      const plan = getContract(index, contract.plan_ref, "patch-plan");
       if (
         review.status !== "pass" ||
-        review.candidate_ref.digest !== contract.candidate_ref.digest
+        review.candidate_ref.digest !== contract.candidate_ref.digest ||
+        review.diff_manifest_ref.digest !== diff.artifact_digest ||
+        review.manifest_ref.digest !== manifest.artifact_digest ||
+        candidate.diff_manifest_ref.digest !== diff.artifact_digest
       ) {
         fail("reference-mismatch", "Delivery requires the passing review for its exact candidate");
       }
       if (
-        candidate.plan_ref.digest !== contract.plan_ref.digest ||
-        candidate.diff_content_digest !== contract.delivery_patch_digest
+        candidate.plan_ref.digest !== plan.artifact_digest ||
+        plan.root_cause_ref.digest !== contract.root_cause_ref.digest ||
+        candidate.diff_content_digest !== contract.delivery_patch_digest ||
+        diff.diff_content_digest !== contract.delivery_patch_digest
       ) {
         fail("reference-mismatch", "Delivery must bind the exact candidate plan and patch digest");
+      }
+      const reviewEvidence = review.criterion_evidence_refs.map((ref) => ref.digest).sort();
+      const deliveryEvidence = contract.criterion_evidence_refs.map((ref) => ref.digest).sort();
+      if (
+        reviewEvidence.length !== deliveryEvidence.length ||
+        reviewEvidence.some((digest, evidenceIndex) => digest !== deliveryEvidence[evidenceIndex])
+      ) {
+        fail("reference-mismatch", "Delivery must preserve the independently reviewed evidence");
+      }
+      const evidence = contract.criterion_evidence_refs.map((ref) =>
+        getContract(index, ref, "criterion-evidence"),
+      );
+      const expectedPaths = diff.entries.map((entry) => entry.path).sort();
+      const actualPaths = [...contract.changed_paths].sort();
+      const expectedCriteria = evidence.map((item) => item.criterion_id).sort();
+      const actualCriteria = [...contract.verified_criterion_ids].sort();
+      const expectedHumanCriteria = evidence
+        .filter((item) => item.evidence_kind === "human")
+        .map((item) => item.criterion_id)
+        .sort();
+      const actualHumanCriteria = [...contract.human_criterion_ids].sort();
+      if (
+        expectedPaths.length !== actualPaths.length ||
+        expectedPaths.some((path, pathIndex) => path !== actualPaths[pathIndex]) ||
+        expectedCriteria.length !== actualCriteria.length ||
+        expectedCriteria.some(
+          (criterionId, criterionIndex) => criterionId !== actualCriteria[criterionIndex],
+        ) ||
+        expectedHumanCriteria.length !== actualHumanCriteria.length ||
+        expectedHumanCriteria.some(
+          (criterionId, criterionIndex) => criterionId !== actualHumanCriteria[criterionIndex],
+        )
+      ) {
+        fail("reference-mismatch", "Delivery summary differs from reviewed files or criteria");
       }
     } else if (contract.artifact_type === "workflow-state") {
       const entry = contract.entry_context;

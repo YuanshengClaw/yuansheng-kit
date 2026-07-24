@@ -467,12 +467,22 @@ describe("Yuansheng Craft platform-neutral state machine", () => {
 
   test("rollback marks the old candidate and every dependent artifact stale", () => {
     const progressed = progressImportedToDelivering();
-    const rolledBack = returnWorkflowToPhase({
-      at: "2026-07-24T08:17:00.000Z",
+    const delivery = one(progressed.harness.byType, "delivery");
+    progressed.active.push(delivery);
+    const deliveringState = recordPhaseArtifact({
+      activeArtifacts: progressed.active,
+      artifact: delivery,
+      at: "2026-07-24T08:16:00.000Z",
       expectedRevision: progressed.state.revision,
       principal: DELIVERY,
-      reason: "Delivery found a candidate issue.",
       state: progressed.state,
+    });
+    const rolledBack = returnWorkflowToPhase({
+      at: "2026-07-24T08:17:00.000Z",
+      expectedRevision: deliveringState.revision,
+      principal: DELIVERY,
+      reason: "Delivery found a candidate issue.",
+      state: deliveringState,
       targetPhase: "building",
     });
     const staleTypes = new Set(rolledBack.stale_artifact_refs.map((ref) => ref.artifact_type));
@@ -486,6 +496,7 @@ describe("Yuansheng Craft platform-neutral state machine", () => {
         "verification-authorization",
         "criterion-evidence",
         "patch-review",
+        "delivery",
       ]),
     );
     expect(rolledBack.artifact_refs.some((ref) => ref.artifact_type === "patch-candidate")).toBe(

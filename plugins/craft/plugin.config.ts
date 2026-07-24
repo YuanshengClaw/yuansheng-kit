@@ -163,6 +163,23 @@ export default {
       },
       requires: ["craft-contract-canonical", "craft-contract-parser", "craft-runtime-config"],
     },
+    "craft-review-delivery": {
+      kind: "workflow",
+      logicalPath: "workflows/review-delivery/review-delivery.ts",
+      source: {
+        kind: "file",
+        path: "plugins/craft/workflows/review-delivery/review-delivery.ts",
+      },
+      requires: [
+        "craft-contract-canonical",
+        "craft-contract-generated-index",
+        "craft-contract-parser",
+        "craft-contract-strict-json",
+        "craft-local-verification",
+        "craft-state-machine-engine",
+        "craft-state-machine-principal",
+      ],
+    },
     "craft-runtime-config": {
       kind: "workflow",
       logicalPath: "workflows/runtime-config/config.ts",
@@ -496,6 +513,7 @@ export default {
         "craft-ssh-verification",
         "craft-plan-authorization",
         "craft-repository-preflight",
+        "craft-review-delivery",
         "craft-runtime-config",
         "craft-state-machine-engine",
         "craft-state-machine-phase-commands",

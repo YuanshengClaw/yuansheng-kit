@@ -249,14 +249,19 @@ export type PatchReview = ArtifactBase &
   WorkflowArtifactBase & {
     artifact_type: "patch-review";
     candidate_ref: ArtifactRef;
+    builder_session_id: OpaqueId;
     /**
      * @minItems 1
      */
     criterion_evidence_refs: [ArtifactRef, ...ArtifactRef[]];
+    diff_content_digest: Digest;
+    diff_manifest_ref: ArtifactRef;
     findings: ReviewFinding[];
+    manifest_ref: ArtifactRef;
     reviewer: PrincipalAudit;
     root_cause_eliminated: boolean;
     status: "fail" | "pass";
+    unresolved_gap_ids: OpaqueId[];
     verification_sufficient: boolean;
     within_approved_scope: boolean;
   };
@@ -267,14 +272,26 @@ export type Delivery = ArtifactBase &
     /**
      * @minItems 1
      */
+    changed_paths: [RelativePath, ...RelativePath[]];
+    /**
+     * @minItems 1
+     */
     criterion_evidence_refs: [ArtifactRef, ...ArtifactRef[]];
     delivery_patch_digest: Digest;
+    diff_manifest_ref: ArtifactRef;
+    follow_up_steps: NonEmptyString[];
+    human_criterion_ids: OpaqueId[];
+    manifest_ref: ArtifactRef;
     patch_review_ref: ArtifactRef;
     plan_ref: ArtifactRef;
     residual_risks: NonEmptyString[];
     root_cause_ref: ArtifactRef;
     status: "complete";
     summary: NonEmptyString;
+    /**
+     * @minItems 1
+     */
+    verified_criterion_ids: [OpaqueId, ...OpaqueId[]];
   };
 export type WorkflowState = ArtifactBase &
   WorkflowArtifactBase & {

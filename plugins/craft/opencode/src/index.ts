@@ -78,6 +78,18 @@ export {
   RepositoryPreflightError,
 } from "../../workflows/repository-preflight/preflight";
 export type {
+  DeliveryProposal,
+  DeliveryResult,
+  PatchReviewProposal,
+  PatchReviewResult,
+} from "../../workflows/review-delivery/review-delivery";
+export {
+  prepareDelivery,
+  ReviewDeliveryError,
+  requestPatchChanges,
+  reviewPatch,
+} from "../../workflows/review-delivery/review-delivery";
+export type {
   CommandProposal,
   CraftRuntimeConfig,
   LocalVerificationRunner,

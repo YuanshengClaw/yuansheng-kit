@@ -177,6 +177,12 @@ const WORKFLOW_IDENTITY = "identity.json";
 const CURRENT_POINTER = "current.json";
 const WORKFLOW_LOCK = ".lock";
 
+function holdsCandidateWorktreeLease(phase: WorkflowState["phase"]): boolean {
+  return (
+    phase === "building" || phase === "verifying" || phase === "reviewing" || phase === "delivering"
+  );
+}
+
 export class AtomicWorkflowStore {
   private constructor(private readonly layout: StoreLayout) {}
 
@@ -283,7 +289,7 @@ export class AtomicWorkflowStore {
     let lease: LeaseAcquisition | null = null;
     let pointerCommitted = false;
     try {
-      if (input.state.phase === "building") {
+      if (holdsCandidateWorktreeLease(input.state.phase)) {
         lease = await this.acquireLease(
           binding.target_worktree_realpath,
           input.state.workflow_id,
@@ -339,19 +345,19 @@ export class AtomicWorkflowStore {
         throw storeError("STORE_CORRUPT", "Workflow identity or worktree binding changed");
       }
 
-      const enteredBuilding =
-        previous.state.phase !== "building" && input.state.phase === "building";
-      const remainedBuilding =
-        previous.state.phase === "building" && input.state.phase === "building";
-      const leftBuilding = previous.state.phase === "building" && input.state.phase !== "building";
-      if (enteredBuilding) {
+      const previouslyHeldLease = holdsCandidateWorktreeLease(previous.state.phase);
+      const nextHoldsLease = holdsCandidateWorktreeLease(input.state.phase);
+      const enteredCandidateLifecycle = !previouslyHeldLease && nextHoldsLease;
+      const remainedInCandidateLifecycle = previouslyHeldLease && nextHoldsLease;
+      const leftCandidateLifecycle = previouslyHeldLease && !nextHoldsLease;
+      if (enteredCandidateLifecycle) {
         enteredLease = await this.acquireLease(
           binding.target_worktree_realpath,
           input.state.workflow_id,
           input.state.revision,
           input.state.updated_at,
         );
-      } else if (remainedBuilding) {
+      } else if (remainedInCandidateLifecycle) {
         await this.assertLeaseOwner(binding.target_worktree_realpath, input.state.workflow_id);
       }
 
@@ -363,7 +369,7 @@ export class AtomicWorkflowStore {
         previous.commitDigest,
       );
       pointerCommitted = true;
-      if (leftBuilding) {
+      if (leftCandidateLifecycle) {
         await this.releaseLease(binding.target_worktree_realpath, input.state.workflow_id);
       }
       return this.readSnapshotFromLayout(workflow, input.state.workflow_id);
@@ -1161,11 +1167,11 @@ export class AtomicWorkflowStore {
     const path = join(this.layout.leasesPath, leaseFileName(targetWorktreeRealpath));
     const bytes = await readRegularFileIfPresent(path, this.layout.leasesPath, this.layout.leases);
     if (bytes === null) {
-      if (snapshot.state.phase === "building") {
+      if (holdsCandidateWorktreeLease(snapshot.state.phase)) {
         issues.push(
           resumeIssue(
             "BUILDING_LEASE_INVALID",
-            "Building workflow has no worktree lease",
+            "Active candidate workflow has no worktree lease",
             "Do not continue mutation; inspect Store recovery residue and reacquire through an explicit transition.",
           ),
         );
@@ -1173,7 +1179,10 @@ export class AtomicWorkflowStore {
       return;
     }
     const lease = parseBuildingLease(bytes);
-    if (snapshot.state.phase !== "building" || lease.workflow_id !== snapshot.state.workflow_id) {
+    if (
+      !holdsCandidateWorktreeLease(snapshot.state.phase) ||
+      lease.workflow_id !== snapshot.state.workflow_id
+    ) {
       issues.push(
         resumeIssue(
           "BUILDING_LEASE_INVALID",

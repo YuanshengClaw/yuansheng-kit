@@ -38,6 +38,10 @@ const BUILDER_AUDIT: PrincipalAudit = {
   agent_id: "ys-craft-patch-builder",
   session_id: "session:STOREBUILDER0001",
 };
+const VERIFIER_AUDIT: PrincipalAudit = {
+  agent_id: "ys-craft-regression-verifier",
+  session_id: "session:STOREVERIFIER001",
+};
 const COORDINATOR = issueTrustedPrincipal({
   agentId: COORDINATOR_AUDIT.agent_id,
   sessionId: COORDINATOR_AUDIT.session_id,
@@ -128,6 +132,26 @@ function revisedBlockedState(state: WorkflowState, at: string, reason: string): 
         reason,
       },
       revision: state.revision + 1,
+      updated_at: at,
+    } as unknown as Record<string, JsonValue>) as unknown as WorkflowState,
+  );
+}
+
+function rephaseCandidateState(
+  state: WorkflowState,
+  phase: "completed" | "verifying",
+  at: string,
+): WorkflowState {
+  const { artifact_digest: _digest, ...payload } = state;
+  return parseState(
+    sealArtifact({
+      ...payload,
+      completed_at: phase === "completed" ? at : null,
+      phase,
+      phase_principal: phase === "verifying" ? VERIFIER_AUDIT : null,
+      principal_audit: [state.coordinator, BUILDER_AUDIT, VERIFIER_AUDIT],
+      revision: state.revision + 1,
+      status: phase === "completed" ? "completed" : "active",
       updated_at: at,
     } as unknown as Record<string, JsonValue>) as unknown as WorkflowState,
   );
@@ -300,6 +324,52 @@ describe("Yuansheng Craft atomic workflow Store", () => {
         controllerRootRealpath: CONTROLLER_ROOT,
         journal: sealJournal(parallelState),
         state: parallelState,
+      }),
+    ).resolves.toMatchObject({ state: { phase: "building" } });
+
+    const verifying = rephaseCandidateState(first.state, "verifying", "2026-07-24T08:01:00.000Z");
+    const verifyingJournal = appendJournal(
+      first.journal,
+      verifying,
+      verifying.updated_at,
+      "succeeded",
+    );
+    await first.store.commitWorkflow({
+      artifacts: [first.binding],
+      expectedRevision: first.state.revision,
+      journal: verifyingJournal,
+      state: verifying,
+    });
+    const whileVerifying = sealState("workflow:STORELEASE0000004", first.binding, {
+      building: true,
+    });
+    await expect(
+      first.store.initializeWorkflow({
+        artifacts: [first.binding],
+        configDigest: CONFIG_DIGEST,
+        controllerRootRealpath: CONTROLLER_ROOT,
+        journal: sealJournal(whileVerifying),
+        state: whileVerifying,
+      }),
+    ).rejects.toMatchObject({ code: "BUILDING_LEASE_CONFLICT" });
+
+    const completed = rephaseCandidateState(verifying, "completed", "2026-07-24T08:02:00.000Z");
+    await first.store.commitWorkflow({
+      artifacts: [first.binding],
+      expectedRevision: verifying.revision,
+      journal: appendJournal(verifyingJournal, completed, completed.updated_at, "succeeded"),
+      state: completed,
+    });
+    const afterCompletion = sealState("workflow:STORELEASE0000005", first.binding, {
+      building: true,
+    });
+    await expect(
+      first.store.initializeWorkflow({
+        artifacts: [first.binding],
+        configDigest: CONFIG_DIGEST,
+        controllerRootRealpath: CONTROLLER_ROOT,
+        journal: sealJournal(afterCompletion),
+        state: afterCompletion,
       }),
     ).resolves.toMatchObject({ state: { phase: "building" } });
   });
