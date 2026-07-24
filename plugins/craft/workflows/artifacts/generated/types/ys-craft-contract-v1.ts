@@ -147,12 +147,17 @@ export type MutationAuthorization = ArtifactBase &
      */
     authorized_changes: [AuthorizedChange, ...AuthorizedChange[]];
     authorized_revision: number;
+    baseline_commit: string;
+    capability: "file-mutation-only";
     plan_ref: ArtifactRef;
     principal: PrincipalAudit;
+    repository_binding_ref: ArtifactRef;
+    target_worktree_realpath: Realpath;
   };
 export type DiffManifest = ArtifactBase &
   WorkflowArtifactBase & {
     artifact_type: "diff-manifest";
+    binary_patch_digest: Digest;
     diff_content_digest: Digest;
     /**
      * @minItems 1
@@ -399,28 +404,39 @@ export interface ResolvedRepository {
   target_worktree_realpath: Realpath;
 }
 export interface PlannedChange {
+  /**
+   * @minItems 1
+   */
+  criterion_ids: [OpaqueId, ...OpaqueId[]];
   id: OpaqueId;
-  operation: "create" | "delete" | "modify";
+  operation: "create" | "delete" | "modify" | "rename";
   path: RelativePath;
+  reason: NonEmptyString;
   /**
    * @minItems 1
    */
   root_cause_item_ids: [OpaqueId, ...OpaqueId[]];
+  source_path: RelativePath | null;
 }
 export interface AuthorizedChange {
-  operation: "create" | "delete" | "modify";
+  operation: "create" | "delete" | "modify" | "rename";
   path: RelativePath;
   planned_change_id: OpaqueId;
+  source_path: RelativePath | null;
 }
 export interface PrincipalAudit {
   agent_id: string;
   session_id: OpaqueId;
 }
 export interface DiffEntry {
+  binary: boolean;
   new_blob_digest: Digest | null;
   old_blob_digest: Digest | null;
-  operation: "create" | "delete" | "modify";
+  new_mode: ("100644" | "100755") | null;
+  old_mode: ("100644" | "100755") | null;
+  operation: "create" | "delete" | "modify" | "rename";
   path: RelativePath;
+  source_path: RelativePath | null;
 }
 export interface VerificationCommand {
   /**

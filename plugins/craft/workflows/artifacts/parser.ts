@@ -57,6 +57,33 @@ function assertUnique(values: readonly string[], label: string): void {
   }
 }
 
+function assertMutationPathShape(
+  change: {
+    readonly operation: "create" | "delete" | "modify" | "rename";
+    readonly path: string;
+    readonly source_path: string | null;
+  },
+  label: string,
+): void {
+  if (change.operation === "rename") {
+    if (change.source_path === null || change.source_path === change.path) {
+      fail("semantic-invalid", `${label} rename requires distinct source and destination paths`);
+    }
+    return;
+  }
+  if (change.source_path !== null) {
+    fail("semantic-invalid", `${label} ${change.operation} must not contain a source path`);
+  }
+}
+
+function mutationScopeKey(change: {
+  readonly operation: "create" | "delete" | "modify" | "rename";
+  readonly path: string;
+  readonly source_path: string | null;
+}): string {
+  return `${change.operation}\0${change.source_path ?? ""}\0${change.path}`;
+}
+
 function assertCanonicalPath(path: string, absolute: boolean): void {
   const normalized = posix.normalize(path);
   const expected = absolute ? normalized.startsWith("/") : !normalized.startsWith("/");
@@ -204,6 +231,9 @@ function assertContractSemantics(contract: YuanshengCraftContractV1): void {
         contract.changes.map((change) => change.path),
         "planned path",
       );
+      for (const change of contract.changes) {
+        assertMutationPathShape(change, "Planned change");
+      }
       break;
     case "mutation-authorization":
       assertRefType(contract.plan_ref, "patch-plan");
@@ -215,6 +245,10 @@ function assertContractSemantics(contract: YuanshengCraftContractV1): void {
         contract.authorized_changes.map((change) => change.path),
         "authorized path",
       );
+      assertRefType(contract.repository_binding_ref, "repository-binding");
+      for (const change of contract.authorized_changes) {
+        assertMutationPathShape(change, "Authorized change");
+      }
       break;
     case "diff-manifest":
       assertRefType(contract.repository_binding_ref, "repository-binding");
@@ -225,17 +259,49 @@ function assertContractSemantics(contract: YuanshengCraftContractV1): void {
         "diff path",
       );
       for (const entry of contract.entries) {
-        const invalidCreate = entry.operation === "create" && entry.old_blob_digest !== null;
-        const invalidDelete = entry.operation === "delete" && entry.new_blob_digest !== null;
+        assertMutationPathShape(entry, "Diff entry");
+        const invalidCreate =
+          entry.operation === "create" &&
+          (entry.old_blob_digest !== null ||
+            entry.old_mode !== null ||
+            entry.new_blob_digest === null ||
+            entry.new_mode === null);
+        const invalidDelete =
+          entry.operation === "delete" &&
+          (entry.new_blob_digest !== null ||
+            entry.new_mode !== null ||
+            entry.old_blob_digest === null ||
+            entry.old_mode === null);
         const invalidModify =
           entry.operation === "modify" &&
-          (entry.old_blob_digest === null || entry.new_blob_digest === null);
-        if (invalidCreate || invalidDelete || invalidModify) {
+          (entry.old_blob_digest === null ||
+            entry.old_mode === null ||
+            entry.new_blob_digest === null ||
+            entry.new_mode === null);
+        const invalidRename =
+          entry.operation === "rename" &&
+          (entry.old_blob_digest === null ||
+            entry.old_mode === null ||
+            entry.new_blob_digest === null ||
+            entry.new_mode === null);
+        if (invalidCreate || invalidDelete || invalidModify || invalidRename) {
           fail(
             "semantic-invalid",
             `Diff blob digests do not match ${entry.operation}: ${entry.path}`,
           );
         }
+      }
+      if (
+        contract.diff_content_digest !==
+        canonicalizeJson({
+          binary_patch_digest: contract.binary_patch_digest,
+          entries: contract.entries,
+        }).digest
+      ) {
+        fail(
+          "digest-mismatch",
+          "Diff content digest does not match its manifest entries and patch",
+        );
       }
       break;
     case "patch-candidate":
@@ -557,6 +623,11 @@ function assertPlanGraph(
     }
   }
   for (const change of contract.changes) {
+    for (const criterionId of change.criterion_ids) {
+      if (!criterionIds.has(criterionId) || !contract.criterion_ids.includes(criterionId)) {
+        fail("reference-mismatch", `Planned change references an unbound criterion ${criterionId}`);
+      }
+    }
     for (const itemId of change.root_cause_item_ids) {
       if (!rootCauseItemIds.has(itemId)) {
         fail("reference-mismatch", `Planned change references unknown root-cause item ${itemId}`);
@@ -570,13 +641,17 @@ function assertMutationGraph(
   index: ReadonlyMap<string, YuanshengCraftContractV1>,
 ): void {
   const plan = getContract(index, contract.plan_ref, "patch-plan");
-  const plannedScope = plan.changes.map(({ id, operation, path }) => ({
+  const binding = getContract(index, contract.repository_binding_ref, "repository-binding");
+  const plannedScope = plan.changes.map(({ id, operation, path, source_path }) => ({
     operation,
     path,
     planned_change_id: id,
+    source_path,
   }));
   if (
     contract.authorized_revision !== plan.plan_revision ||
+    contract.baseline_commit !== binding.commit_sha ||
+    contract.target_worktree_realpath !== binding.target_worktree_realpath ||
     canonicalizeJson(contract.authorized_changes).text !== canonicalizeJson(plannedScope).text
   ) {
     fail(
@@ -598,11 +673,12 @@ function assertDiffGraph(
   if (authorization.plan_ref.digest !== contract.plan_ref.digest) {
     fail("reference-mismatch", "Diff manifest plan does not match its mutation authorization");
   }
-  const authorizedScope = new Set(
-    authorization.authorized_changes.map((change) => `${change.operation}\0${change.path}`),
-  );
+  if (authorization.repository_binding_ref.digest !== contract.repository_binding_ref.digest) {
+    fail("reference-mismatch", "Diff manifest repository does not match its authorization");
+  }
+  const authorizedScope = new Set(authorization.authorized_changes.map(mutationScopeKey));
   for (const entry of contract.entries) {
-    if (!authorizedScope.has(`${entry.operation}\0${entry.path}`)) {
+    if (!authorizedScope.has(mutationScopeKey(entry))) {
       fail("reference-mismatch", `Diff entry is outside the authorized scope: ${entry.path}`);
     }
   }
@@ -780,6 +856,34 @@ export function validateCraftContractGraph(
             fail("reference-mismatch", "Problem workflow cannot activate an imported root cause");
           }
         }
+      }
+    }
+  }
+  const candidateGroups = new Map<string, PatchCandidate[]>();
+  for (const contract of contracts) {
+    if (contract.artifact_type !== "patch-candidate") {
+      continue;
+    }
+    const key = `${contract.workflow_id}\0${contract.plan_ref.digest}`;
+    const group = candidateGroups.get(key) ?? [];
+    group.push(contract);
+    candidateGroups.set(key, group);
+  }
+  for (const candidates of candidateGroups.values()) {
+    candidates.sort((left, right) => left.candidate_revision - right.candidate_revision);
+    for (let candidateIndex = 1; candidateIndex < candidates.length; candidateIndex += 1) {
+      const previous = candidates[candidateIndex - 1];
+      const current = candidates[candidateIndex];
+      if (
+        previous === undefined ||
+        current === undefined ||
+        current.candidate_revision <= previous.candidate_revision ||
+        current.iteration <= previous.iteration
+      ) {
+        fail(
+          "semantic-invalid",
+          "Patch candidate revision and iteration must both increase strictly for one plan",
+        );
       }
     }
   }

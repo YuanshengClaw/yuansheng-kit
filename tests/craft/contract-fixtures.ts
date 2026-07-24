@@ -36,11 +36,28 @@ const BINDING_TREE_DIGEST = digest("bound repository tree");
 const BLUEPRINT_RAW_DIGEST = digest("raw Blueprint bytes");
 const BLUEPRINT_CANONICAL_DIGEST = digest("canonical Blueprint bytes");
 const SEALED_DIRECTORY_DIGEST = digest("sealed function directory");
-const DIFF_CONTENT_DIGEST = digest("canonical worktree diff");
 
 function digest(value: string): `sha256:${string}` {
   return sha256Digest(new TextEncoder().encode(value));
 }
+
+const BINARY_PATCH_DIGEST = digest("canonical binary patch");
+const DIFF_ENTRIES: DiffManifest["entries"] = [
+  {
+    binary: false,
+    new_blob_digest: digest("new normalize.ts"),
+    new_mode: "100644",
+    old_blob_digest: digest("old normalize.ts"),
+    old_mode: "100644",
+    operation: "modify",
+    path: "src/normalize.ts",
+    source_path: null,
+  },
+];
+const DIFF_CONTENT_DIGEST = canonicalizeJson({
+  binary_patch_digest: BINARY_PATCH_DIGEST,
+  entries: DIFF_ENTRIES,
+}).digest;
 
 function makeContract<T extends YuanshengCraftContractV1>(payload: Omit<T, "artifact_digest">): T {
   return sealArtifact(payload as unknown as Record<string, JsonValue>) as unknown as T;
@@ -243,10 +260,13 @@ export function makeCompleteContractGraph(): CompleteContractGraph {
     artifact_version: 1,
     changes: [
       {
+        criterion_ids: ["criterion:PRESERVE12345678"],
         id: "change:PRESERVE12345678",
         operation: "modify",
         path: "src/normalize.ts",
+        reason: "Preserve the required configuration field.",
         root_cause_item_ids: ["inference:NORMALIZE1234567"],
+        source_path: null,
       },
     ],
     created_at: "2026-07-24T08:03:00.000Z",
@@ -267,30 +287,29 @@ export function makeCompleteContractGraph(): CompleteContractGraph {
         operation: "modify",
         path: "src/normalize.ts",
         planned_change_id: "change:PRESERVE12345678",
+        source_path: null,
       },
     ],
     authorized_revision: 1,
+    baseline_commit: binding.commit_sha,
+    capability: "file-mutation-only",
     created_at: "2026-07-24T08:04:00.000Z",
     plan_ref: artifactRef(plan),
     principal: {
       agent_id: "ys-craft-patch-builder",
       session_id: BUILDER_SESSION_ID,
     },
+    repository_binding_ref: artifactRef(binding),
+    target_worktree_realpath: binding.target_worktree_realpath,
     workflow_id: WORKFLOW_ID,
   });
   const diff = makeContract<DiffManifest>({
     artifact_type: "diff-manifest",
     artifact_version: 1,
+    binary_patch_digest: BINARY_PATCH_DIGEST,
     created_at: "2026-07-24T08:05:00.000Z",
     diff_content_digest: DIFF_CONTENT_DIGEST,
-    entries: [
-      {
-        new_blob_digest: digest("new normalize.ts"),
-        old_blob_digest: digest("old normalize.ts"),
-        operation: "modify",
-        path: "src/normalize.ts",
-      },
-    ],
+    entries: DIFF_ENTRIES,
     mutation_authorization_ref: artifactRef(mutation),
     plan_ref: artifactRef(plan),
     repository_binding_ref: artifactRef(binding),
@@ -315,7 +334,7 @@ export function makeCompleteContractGraph(): CompleteContractGraph {
     created_at: "2026-07-24T08:07:00.000Z",
     diff_content_digest: DIFF_CONTENT_DIGEST,
     diff_manifest_ref: artifactRef(diff),
-    iteration: 1,
+    iteration: 2,
     plan_ref: artifactRef(plan),
     status: "ready-for-verification",
     workflow_id: WORKFLOW_ID,

@@ -2,6 +2,7 @@ import { isAbsolute } from "node:path";
 import { type Plugin, type ToolDefinition, tool } from "@opencode-ai/plugin";
 
 import { CRAFT_TOOL_SURFACE, type CraftToolId } from "../../workflows/tool-surface";
+import { createOpenCodeBuilderWriteGuard } from "./builder-write-guard";
 import { loadOpenCodeCraftController } from "./controller-runtime";
 
 export type * from "../../workflows/artifacts/generated";
@@ -32,6 +33,32 @@ export {
   buildBlueprintReviewSubject,
   reviewBlueprintForImport,
 } from "../../workflows/blueprint-import/transaction";
+export type {
+  BinaryGitCommandResult,
+  BinaryGitRunner,
+  CanonicalDiffSnapshot,
+  CapturedPatchCandidate,
+} from "../../workflows/building/candidate-capture";
+export {
+  assertCandidateWorktreeUnchanged,
+  CandidateCaptureError,
+  captureCanonicalDiff,
+  capturePatchCandidate,
+} from "../../workflows/building/candidate-capture";
+export type {
+  PatchPlanApprovalResult,
+  PatchPlanProposal,
+} from "../../workflows/building/plan-authorization";
+export {
+  approvePatchPlan,
+  PatchPlanApprovalError,
+} from "../../workflows/building/plan-authorization";
+export type { FileMutationRequest } from "../../workflows/building/write-guard";
+export {
+  assertAuthorizedFileMutation,
+  assertBuildingProcessDenied,
+  FileMutationDeniedError,
+} from "../../workflows/building/write-guard";
 export type {
   GitCommandResult,
   GitRunner,
@@ -131,8 +158,11 @@ export {
   StorePathError,
   WorkflowStoreError,
 } from "../../workflows/store";
+export type { OpenCodeBuilderWriteGuard } from "./builder-write-guard";
+export { createOpenCodeBuilderWriteGuard } from "./builder-write-guard";
 export type { OpenCodeCraftController } from "./controller-runtime";
 export {
+  createOpenCodeBinaryGitRunner,
   createOpenCodeGitRunner,
   loadOpenCodeCraftController,
 } from "./controller-runtime";
@@ -299,5 +329,9 @@ if (
 
 export const YuanshengCraftPlugin: Plugin = async ({ directory, worktree }) => {
   await loadOpenCodeCraftController({ directory, worktree });
-  return { tool: craftTools };
+  const writeGuard = createOpenCodeBuilderWriteGuard();
+  return {
+    ...writeGuard.hooks,
+    tool: craftTools,
+  };
 };

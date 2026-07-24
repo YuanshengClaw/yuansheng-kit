@@ -1,7 +1,10 @@
 import { constants } from "node:fs";
 import { lstat, open, realpath } from "node:fs/promises";
 import { dirname, isAbsolute, join, parse as parsePath, resolve } from "node:path";
-
+import type {
+  BinaryGitCommandResult,
+  BinaryGitRunner,
+} from "../../workflows/building/candidate-capture";
 import type { GitCommandResult, GitRunner } from "../../workflows/repository-preflight/preflight";
 import {
   type ParsedCraftRuntimeConfig,
@@ -139,6 +142,39 @@ async function readLimited(
   return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
 }
 
+async function readLimitedBytes(
+  stream: ReadableStream<Uint8Array>,
+  limit: number,
+  abort: () => void,
+): Promise<Uint8Array> {
+  const reader = stream.getReader();
+  const chunks: Uint8Array[] = [];
+  let length = 0;
+  try {
+    while (true) {
+      const item = await reader.read();
+      if (item.done) {
+        break;
+      }
+      length += item.value.byteLength;
+      if (length > limit) {
+        abort();
+        throw new Error("Git command output exceeded the 4 MiB limit");
+      }
+      chunks.push(item.value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  const bytes = new Uint8Array(length);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return bytes;
+}
+
 export function createOpenCodeGitRunner(controllerRoot: string): GitRunner {
   return Object.freeze({
     async run(argv: readonly string[], timeoutMs: number): Promise<GitCommandResult> {
@@ -172,6 +208,63 @@ export function createOpenCodeGitRunner(controllerRoot: string): GitRunner {
           stderr: timedOut
             ? `${stderr}\nGit command timed out after ${timeoutMs} ms`.trim()
             : stderr,
+          stdout,
+        });
+      } finally {
+        clearTimeout(timer);
+        if (child.exitCode === null) {
+          child.kill();
+        }
+      }
+    },
+  });
+}
+
+export function createOpenCodeBinaryGitRunner(): BinaryGitRunner {
+  return Object.freeze({
+    async run(
+      argv: readonly string[],
+      cwd: string,
+      timeoutMs: number,
+    ): Promise<BinaryGitCommandResult> {
+      if (
+        !isAbsolute(cwd) ||
+        argv.length === 0 ||
+        argv[0] !== "git" ||
+        argv.some((argument) => argument.length === 0 || argument.includes("\0"))
+      ) {
+        throw new TypeError("Yuansheng Craft binary Git runner requires explicit cwd and argv");
+      }
+      const child = Bun.spawn([...argv], {
+        cwd,
+        stderr: "pipe",
+        stdin: "ignore",
+        stdout: "pipe",
+      });
+      let timedOut = false;
+      const timer = setTimeout(() => {
+        timedOut = true;
+        child.kill();
+      }, timeoutMs);
+      try {
+        const abort = () => child.kill();
+        const [exitCode, stdout, stderr] = await Promise.all([
+          child.exited,
+          readLimitedBytes(child.stdout, MAX_GIT_OUTPUT_BYTES, abort),
+          readLimitedBytes(child.stderr, MAX_GIT_OUTPUT_BYTES, abort),
+        ]);
+        if (!timedOut) {
+          return Object.freeze({ exitCode, stderr, stdout });
+        }
+        const timeoutMessage = new TextEncoder().encode(
+          `Git command timed out after ${timeoutMs} ms`,
+        );
+        const timeoutStderr = new Uint8Array(stderr.byteLength + timeoutMessage.byteLength);
+        timeoutStderr.set(stderr);
+        timeoutStderr.set(timeoutMessage, stderr.byteLength);
+        return Object.freeze({
+          exitCode: 124,
+          stderr: timeoutStderr,
           stdout,
         });
       } finally {

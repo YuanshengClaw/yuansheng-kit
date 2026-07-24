@@ -79,6 +79,49 @@ export default {
         path: "plugins/craft/workflows/entry-strategies/catalog.ts",
       },
     },
+    "craft-plan-authorization": {
+      kind: "workflow",
+      logicalPath: "workflows/building/plan-authorization.ts",
+      source: {
+        kind: "file",
+        path: "plugins/craft/workflows/building/plan-authorization.ts",
+      },
+      requires: [
+        "craft-contract-canonical",
+        "craft-contract-generated-index",
+        "craft-contract-parser",
+        "craft-contract-strict-json",
+        "craft-state-machine-principal",
+      ],
+    },
+    "craft-candidate-capture": {
+      kind: "workflow",
+      logicalPath: "workflows/building/candidate-capture.ts",
+      source: {
+        kind: "file",
+        path: "plugins/craft/workflows/building/candidate-capture.ts",
+      },
+      requires: [
+        "craft-contract-canonical",
+        "craft-contract-generated-index",
+        "craft-contract-parser",
+        "craft-contract-strict-json",
+        "craft-state-machine-principal",
+      ],
+    },
+    "craft-write-guard": {
+      kind: "workflow",
+      logicalPath: "workflows/building/write-guard.ts",
+      source: {
+        kind: "file",
+        path: "plugins/craft/workflows/building/write-guard.ts",
+      },
+      requires: [
+        "craft-contract-generated-index",
+        "craft-contract-parser",
+        "craft-state-machine-principal",
+      ],
+    },
     "craft-repository-preflight": {
       kind: "workflow",
       logicalPath: "workflows/repository-preflight/preflight.ts",
@@ -350,7 +393,20 @@ export default {
         kind: "file",
         path: "plugins/craft/opencode/src/controller-runtime.ts",
       },
-      requires: ["craft-repository-preflight", "craft-runtime-config"],
+      requires: ["craft-candidate-capture", "craft-repository-preflight", "craft-runtime-config"],
+    },
+    "opencode-builder-write-guard": {
+      kind: "platform-runtime",
+      logicalPath: "opencode/src/builder-write-guard.ts",
+      source: {
+        kind: "file",
+        path: "plugins/craft/opencode/src/builder-write-guard.ts",
+      },
+      requires: [
+        "craft-contract-generated-index",
+        "craft-state-machine-principal",
+        "craft-write-guard",
+      ],
     },
     "opencode-platform-handler": {
       kind: "platform-handler",
@@ -384,7 +440,9 @@ export default {
       requires: [
         "craft-blueprint-import-transaction",
         "craft-blueprint-import-verifier",
+        "craft-candidate-capture",
         "craft-contract-parser",
+        "craft-plan-authorization",
         "craft-repository-preflight",
         "craft-runtime-config",
         "craft-state-machine-engine",
@@ -394,6 +452,8 @@ export default {
         "craft-state-machine-stop-gate",
         "craft-store-index",
         "craft-tool-surface",
+        "craft-write-guard",
+        "opencode-builder-write-guard",
         "opencode-controller-runtime",
       ],
     },
@@ -515,6 +575,8 @@ export default {
         ],
         permissions: {
           "*": "deny",
+          edit: "allow",
+          write: "allow",
           "ys_craft_*": "allow",
           skill: "allow",
         },

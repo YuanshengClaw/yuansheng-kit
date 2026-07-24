@@ -738,16 +738,35 @@
       "title": "PlannedChange",
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "operation", "path", "root_cause_item_ids"],
+      "required": [
+        "criterion_ids",
+        "id",
+        "operation",
+        "path",
+        "reason",
+        "root_cause_item_ids",
+        "source_path"
+      ],
       "properties": {
+        "criterion_ids": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/opaque_id"
+          }
+        },
         "id": {
           "$ref": "#/$defs/opaque_id"
         },
         "operation": {
-          "enum": ["create", "delete", "modify"]
+          "enum": ["create", "delete", "modify", "rename"]
         },
         "path": {
           "$ref": "#/$defs/relative_path"
+        },
+        "reason": {
+          "$ref": "#/$defs/non_empty_string"
         },
         "root_cause_item_ids": {
           "type": "array",
@@ -756,6 +775,16 @@
           "items": {
             "$ref": "#/$defs/opaque_id"
           }
+        },
+        "source_path": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/relative_path"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       }
     },
@@ -834,16 +863,26 @@
       "title": "AuthorizedChange",
       "type": "object",
       "additionalProperties": false,
-      "required": ["operation", "path", "planned_change_id"],
+      "required": ["operation", "path", "planned_change_id", "source_path"],
       "properties": {
         "operation": {
-          "enum": ["create", "delete", "modify"]
+          "enum": ["create", "delete", "modify", "rename"]
         },
         "path": {
           "$ref": "#/$defs/relative_path"
         },
         "planned_change_id": {
           "$ref": "#/$defs/opaque_id"
+        },
+        "source_path": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/relative_path"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       }
     },
@@ -864,8 +903,12 @@
             "artifact_type",
             "authorized_changes",
             "authorized_revision",
+            "baseline_commit",
+            "capability",
             "plan_ref",
-            "principal"
+            "principal",
+            "repository_binding_ref",
+            "target_worktree_realpath"
           ],
           "properties": {
             "action": {
@@ -885,11 +928,24 @@
               "type": "integer",
               "minimum": 1
             },
+            "baseline_commit": {
+              "type": "string",
+              "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$"
+            },
+            "capability": {
+              "const": "file-mutation-only"
+            },
             "plan_ref": {
               "$ref": "#/$defs/artifact_ref"
             },
             "principal": {
               "$ref": "#/$defs/principal"
+            },
+            "repository_binding_ref": {
+              "$ref": "#/$defs/artifact_ref"
+            },
+            "target_worktree_realpath": {
+              "$ref": "#/$defs/realpath"
             }
           }
         }
@@ -900,8 +956,20 @@
       "title": "DiffEntry",
       "type": "object",
       "additionalProperties": false,
-      "required": ["new_blob_digest", "old_blob_digest", "operation", "path"],
+      "required": [
+        "binary",
+        "new_blob_digest",
+        "new_mode",
+        "old_blob_digest",
+        "old_mode",
+        "operation",
+        "path",
+        "source_path"
+      ],
       "properties": {
+        "binary": {
+          "type": "boolean"
+        },
         "new_blob_digest": {
           "oneOf": [
             {
@@ -922,11 +990,41 @@
             }
           ]
         },
+        "new_mode": {
+          "oneOf": [
+            {
+              "enum": ["100644", "100755"]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "old_mode": {
+          "oneOf": [
+            {
+              "enum": ["100644", "100755"]
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "operation": {
-          "enum": ["create", "delete", "modify"]
+          "enum": ["create", "delete", "modify", "rename"]
         },
         "path": {
           "$ref": "#/$defs/relative_path"
+        },
+        "source_path": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/relative_path"
+            },
+            {
+              "type": "null"
+            }
+          ]
         }
       }
     },
@@ -944,6 +1042,7 @@
           "type": "object",
           "required": [
             "artifact_type",
+            "binary_patch_digest",
             "diff_content_digest",
             "entries",
             "mutation_authorization_ref",
@@ -953,6 +1052,9 @@
           "properties": {
             "artifact_type": {
               "const": "diff-manifest"
+            },
+            "binary_patch_digest": {
+              "$ref": "#/$defs/digest"
             },
             "diff_content_digest": {
               "$ref": "#/$defs/digest"
