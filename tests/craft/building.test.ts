@@ -15,6 +15,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createOpenCodeBuilderWriteGuard } from "../../plugins/craft/opencode/src/builder-write-guard";
+import { issueOpenCodePrincipal } from "../../plugins/craft/opencode/src/platform-principal";
 import {
   canonicalizeJson,
   sealArtifact,
@@ -51,7 +52,7 @@ import {
 
 const WORKFLOW_ID = "workflow:BUILDING12345678";
 const CREATED_AT = "2026-07-24T10:00:00.000Z";
-const BUILDER = issueTrustedPrincipal({
+const BUILDER = issueOpenCodePrincipal({
   agentId: "ys-craft-patch-builder",
   sessionId: "session:BUILDING12345678",
 });

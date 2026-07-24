@@ -472,12 +472,6 @@ export class AtomicWorkflowStore {
 
   async recordOperationResult(input: RecordOperationResultInput): Promise<OperationResultRecord> {
     const principal = auditTrustedPrincipal(input.principal);
-    if (principal.agent_id !== "ys-craft") {
-      throw storeError(
-        "OPERATION_INVALID",
-        "Manual operation accounting requires the trusted Yuansheng Craft primary agent",
-      );
-    }
     const operation = await this.openOperationLayout(input.workflowId, input.operationId);
     const intent = parseOperationIntent(
       await readRegularFileNoFollow(
@@ -495,6 +489,12 @@ export class AtomicWorkflowStore {
     );
     assertOperationIdentity(intent, input.workflowId, input.operationId);
     assertOperationIdentity(started, input.workflowId, input.operationId);
+    if (principal.agent_id !== "ys-craft" && !principalsEqual(principal, intent.principal)) {
+      throw storeError(
+        "OPERATION_INVALID",
+        "Operation result requires its exact executing principal or the trusted primary agent",
+      );
+    }
     if (
       started.intent_digest !== recordDigest(intent) ||
       Date.parse(input.at) < Date.parse(started.started_at)

@@ -1,0 +1,56 @@
+// Bun Snapshot v1, https://bun.sh/docs/test/snapshots
+
+exports[`Yuansheng Craft OpenCode adapter registers the exact typed surface and rejects unobserved or changed identities 1`] = `
+{
+  "ys_craft_capture_candidate": [
+    "expected_revision",
+    "workflow_id",
+  ],
+  "ys_craft_complete": [
+    "expected_revision",
+    "workflow_id",
+  ],
+  "ys_craft_prepare_repository": [
+    "request_id",
+  ],
+  "ys_craft_prepare_verification": [
+    "source",
+    "workflow_id",
+  ],
+  "ys_craft_record_artifact": [
+    "artifact_kind",
+    "artifact_payload",
+    "workflow_id",
+  ],
+  "ys_craft_resume": [
+    "store_anchor",
+    "workflow_id",
+  ],
+  "ys_craft_return_to_phase": [
+    "expected_revision",
+    "reason",
+    "target_phase",
+    "workflow_id",
+  ],
+  "ys_craft_review_blueprint": [
+    "sealed_function_directory",
+    "target_worktree",
+  ],
+  "ys_craft_run_verification": [
+    "expected_revision",
+    "workflow_id",
+  ],
+  "ys_craft_start_problem": [
+    "problem",
+    "target_worktree",
+  ],
+  "ys_craft_status": [
+    "workflow_id",
+  ],
+  "ys_craft_transition": [
+    "expected_revision",
+    "target_phase",
+    "workflow_id",
+  ],
+}
+`;

@@ -12,9 +12,9 @@ import {
 } from "../../workflows/building/write-guard";
 import {
   auditTrustedPrincipal,
-  issueTrustedPrincipal,
   type TrustedPrincipal,
 } from "../../workflows/state-machine/principal";
+import { canonicalOpenCodeSessionId, issueOpenCodePrincipal } from "./platform-principal";
 
 interface ActiveBuilderContext {
   readonly activeArtifacts: readonly YuanshengCraftContractV1[];
@@ -130,7 +130,7 @@ export function createOpenCodeBuilderWriteGuard(): OpenCodeBuilderWriteGuard {
       if (
         agent !== "ys-craft-patch-builder" ||
         principal.agent_id !== agent ||
-        principal.session_id !== input.sessionID
+        principal.session_id !== canonicalOpenCodeSessionId(input.sessionID)
       ) {
         return deny("write/edit session does not match platform-provided builder identity");
       }
@@ -168,7 +168,7 @@ export function createOpenCodeBuilderWriteGuard(): OpenCodeBuilderWriteGuard {
         deny("ToolContext conflicts with the platform chat agent identity");
       }
       sessionAgents.set(context.sessionID, context.agent);
-      const principal = issueTrustedPrincipal({
+      const principal = issueOpenCodePrincipal({
         agentId: context.agent,
         sessionId: context.sessionID,
       });

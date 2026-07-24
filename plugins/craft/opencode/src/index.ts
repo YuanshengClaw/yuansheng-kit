@@ -1,9 +1,22 @@
-import { isAbsolute } from "node:path";
 import { type Plugin, type ToolDefinition, tool } from "@opencode-ai/plugin";
 
 import { CRAFT_TOOL_SURFACE, type CraftToolId } from "../../workflows/tool-surface";
+import {
+  createDefaultOpenCodeCraftRuntimeDependencies,
+  OpenCodeCraftRuntime,
+} from "./adapter-runtime";
 import { createOpenCodeBuilderWriteGuard } from "./builder-write-guard";
-import { loadOpenCodeCraftController } from "./controller-runtime";
+import {
+  createOpenCodeBinaryGitRunner,
+  createOpenCodeGitRunner,
+  createOpenCodeLocalProcessRunner,
+  createOpenCodeVerificationLogSink,
+  loadOpenCodeCraftController,
+} from "./controller-runtime";
+import {
+  createOpenCodeSshVerificationRunner,
+  resolveSystemSshExecutable,
+} from "./openssh-verification-runtime";
 
 export type * from "../../workflows/artifacts/generated";
 export {
@@ -201,6 +214,11 @@ export {
   SSH_PREFLIGHT_PROTOCOL,
   SshVerificationError,
 } from "../../workflows/verification/ssh-verification";
+export type { OpenCodeCraftRuntimeDependencies, OpenCodeCraftStatus } from "./adapter-runtime";
+export {
+  createDefaultOpenCodeCraftRuntimeDependencies,
+  OpenCodeCraftRuntime,
+} from "./adapter-runtime";
 export type { OpenCodeBuilderWriteGuard } from "./builder-write-guard";
 export { createOpenCodeBuilderWriteGuard } from "./builder-write-guard";
 export type { OpenCodeCraftController } from "./controller-runtime";
@@ -218,6 +236,7 @@ export {
   quoteOpenSshPosixArgument,
   resolveSystemSshExecutable,
 } from "./openssh-verification-runtime";
+export { canonicalOpenCodeSessionId, issueOpenCodePrincipal } from "./platform-principal";
 
 const TOOL_DESCRIPTIONS = Object.freeze(
   Object.fromEntries(
@@ -230,160 +249,191 @@ const TOOL_DESCRIPTIONS = Object.freeze(
   ) as Readonly<Record<CraftToolId, string>>,
 );
 
-function unavailable(toolId: CraftToolId): never {
-  throw new Error(
-    `YS_CRAFT_SKELETON_UNAVAILABLE: ${toolId} is registered but has no workflow implementation`,
-  );
-}
+export function createOpenCodeCraftTools(
+  runtime: OpenCodeCraftRuntime,
+): Record<CraftToolId, ToolDefinition> {
+  const craftTools = {
+    ys_craft_start_problem: tool({
+      description: TOOL_DESCRIPTIONS.ys_craft_start_problem,
+      args: {
+        problem: tool.schema.string().min(1),
+        target_worktree: tool.schema.string().min(1),
+      },
+      async execute(args, context) {
+        return runtime.startProblem(args, context);
+      },
+    }),
+    ys_craft_review_blueprint: tool({
+      description: TOOL_DESCRIPTIONS.ys_craft_review_blueprint,
+      args: {
+        sealed_function_directory: tool.schema.string().min(1),
+        target_worktree: tool.schema.string().min(1),
+      },
+      async execute(args, context) {
+        return runtime.reviewBlueprint(args, context);
+      },
+    }),
+    ys_craft_status: tool({
+      description: TOOL_DESCRIPTIONS.ys_craft_status,
+      args: {
+        workflow_id: tool.schema.string().min(1),
+      },
+      async execute({ workflow_id }, context) {
+        return runtime.status(workflow_id, context);
+      },
+    }),
+    ys_craft_resume: tool({
+      description: TOOL_DESCRIPTIONS.ys_craft_resume,
+      args: {
+        store_anchor: tool.schema.string().min(1),
+        workflow_id: tool.schema.string().min(1),
+      },
+      async execute(args, context) {
+        return runtime.resume(args, context);
+      },
+    }),
+    ys_craft_prepare_repository: tool({
+      description: TOOL_DESCRIPTIONS.ys_craft_prepare_repository,
+      args: {
+        request_id: tool.schema.string().min(1),
+      },
+      async execute({ request_id }, context) {
+        return runtime.prepareRepository(request_id, context);
+      },
+    }),
+    ys_craft_record_artifact: tool({
+      description: TOOL_DESCRIPTIONS.ys_craft_record_artifact,
+      args: {
+        artifact_kind: tool.schema.string().min(1),
+        artifact_payload: tool.schema.string().min(1),
+        workflow_id: tool.schema.string().min(1),
+      },
+      async execute(args, context) {
+        return runtime.recordArtifact(args, context);
+      },
+    }),
+    ys_craft_capture_candidate: tool({
+      description: TOOL_DESCRIPTIONS.ys_craft_capture_candidate,
+      args: {
+        expected_revision: tool.schema.number().int().nonnegative(),
+        workflow_id: tool.schema.string().min(1),
+      },
+      async execute(args, context) {
+        return runtime.captureCandidate(args, context);
+      },
+    }),
+    ys_craft_prepare_verification: tool({
+      description: TOOL_DESCRIPTIONS.ys_craft_prepare_verification,
+      args: {
+        source: tool.schema.string().min(1),
+        workflow_id: tool.schema.string().min(1),
+      },
+      async execute(args, context) {
+        return runtime.prepareVerification(args, context);
+      },
+    }),
+    ys_craft_run_verification: tool({
+      description: TOOL_DESCRIPTIONS.ys_craft_run_verification,
+      args: {
+        expected_revision: tool.schema.number().int().nonnegative(),
+        workflow_id: tool.schema.string().min(1),
+      },
+      async execute(args, context) {
+        return runtime.runVerification(args, context);
+      },
+    }),
+    ys_craft_transition: tool({
+      description: TOOL_DESCRIPTIONS.ys_craft_transition,
+      args: {
+        expected_revision: tool.schema.number().int().nonnegative(),
+        target_phase: tool.schema.string().min(1),
+        workflow_id: tool.schema.string().min(1),
+      },
+      async execute(args, context) {
+        return runtime.transition(args, context);
+      },
+    }),
+    ys_craft_return_to_phase: tool({
+      description: TOOL_DESCRIPTIONS.ys_craft_return_to_phase,
+      args: {
+        expected_revision: tool.schema.number().int().nonnegative(),
+        reason: tool.schema.string().min(1),
+        target_phase: tool.schema.string().min(1),
+        workflow_id: tool.schema.string().min(1),
+      },
+      async execute(args, context) {
+        return runtime.returnToPhase(args, context);
+      },
+    }),
+    ys_craft_complete: tool({
+      description: TOOL_DESCRIPTIONS.ys_craft_complete,
+      args: {
+        expected_revision: tool.schema.number().int().nonnegative(),
+        workflow_id: tool.schema.string().min(1),
+      },
+      async execute(args, context) {
+        return runtime.complete(args, context);
+      },
+    }),
+  } satisfies Record<CraftToolId, ToolDefinition>;
 
-function requireAbsolutePath(value: string, parameter: string): void {
-  if (!isAbsolute(value)) {
-    throw new Error(`${parameter} must be an absolute path`);
+  const expectedToolIds = CRAFT_TOOL_SURFACE.map((definition) => definition.id).sort();
+  const registeredToolIds = Object.keys(craftTools).sort();
+  if (
+    expectedToolIds.length !== registeredToolIds.length ||
+    expectedToolIds.some((toolId, index) => toolId !== registeredToolIds[index])
+  ) {
+    throw new Error("Yuansheng Craft runtime tool registration does not match the frozen surface");
   }
-}
-
-const craftTools = {
-  ys_craft_start_problem: tool({
-    description: TOOL_DESCRIPTIONS.ys_craft_start_problem,
-    args: {
-      problem: tool.schema.string().min(1),
-      target_worktree: tool.schema.string().min(1),
-    },
-    async execute({ target_worktree }) {
-      requireAbsolutePath(target_worktree, "target_worktree");
-      return unavailable("ys_craft_start_problem");
-    },
-  }),
-  ys_craft_review_blueprint: tool({
-    description: TOOL_DESCRIPTIONS.ys_craft_review_blueprint,
-    args: {
-      sealed_function_directory: tool.schema.string().min(1),
-      target_worktree: tool.schema.string().min(1),
-    },
-    async execute({ sealed_function_directory, target_worktree }) {
-      requireAbsolutePath(sealed_function_directory, "sealed_function_directory");
-      requireAbsolutePath(target_worktree, "target_worktree");
-      return unavailable("ys_craft_review_blueprint");
-    },
-  }),
-  ys_craft_status: tool({
-    description: TOOL_DESCRIPTIONS.ys_craft_status,
-    args: {
-      workflow_id: tool.schema.string().min(1),
-    },
-    async execute() {
-      return unavailable("ys_craft_status");
-    },
-  }),
-  ys_craft_resume: tool({
-    description: TOOL_DESCRIPTIONS.ys_craft_resume,
-    args: {
-      store_anchor: tool.schema.string().min(1),
-      workflow_id: tool.schema.string().min(1),
-    },
-    async execute() {
-      return unavailable("ys_craft_resume");
-    },
-  }),
-  ys_craft_prepare_repository: tool({
-    description: TOOL_DESCRIPTIONS.ys_craft_prepare_repository,
-    args: {
-      request_id: tool.schema.string().min(1),
-    },
-    async execute() {
-      return unavailable("ys_craft_prepare_repository");
-    },
-  }),
-  ys_craft_record_artifact: tool({
-    description: TOOL_DESCRIPTIONS.ys_craft_record_artifact,
-    args: {
-      artifact_kind: tool.schema.string().min(1),
-      artifact_payload: tool.schema.string().min(1),
-      workflow_id: tool.schema.string().min(1),
-    },
-    async execute() {
-      return unavailable("ys_craft_record_artifact");
-    },
-  }),
-  ys_craft_capture_candidate: tool({
-    description: TOOL_DESCRIPTIONS.ys_craft_capture_candidate,
-    args: {
-      expected_revision: tool.schema.number().int().nonnegative(),
-      workflow_id: tool.schema.string().min(1),
-    },
-    async execute() {
-      return unavailable("ys_craft_capture_candidate");
-    },
-  }),
-  ys_craft_prepare_verification: tool({
-    description: TOOL_DESCRIPTIONS.ys_craft_prepare_verification,
-    args: {
-      source: tool.schema.string().min(1),
-      workflow_id: tool.schema.string().min(1),
-    },
-    async execute() {
-      return unavailable("ys_craft_prepare_verification");
-    },
-  }),
-  ys_craft_run_verification: tool({
-    description: TOOL_DESCRIPTIONS.ys_craft_run_verification,
-    args: {
-      expected_revision: tool.schema.number().int().nonnegative(),
-      workflow_id: tool.schema.string().min(1),
-    },
-    async execute() {
-      return unavailable("ys_craft_run_verification");
-    },
-  }),
-  ys_craft_transition: tool({
-    description: TOOL_DESCRIPTIONS.ys_craft_transition,
-    args: {
-      expected_revision: tool.schema.number().int().nonnegative(),
-      target_phase: tool.schema.string().min(1),
-      workflow_id: tool.schema.string().min(1),
-    },
-    async execute() {
-      return unavailable("ys_craft_transition");
-    },
-  }),
-  ys_craft_return_to_phase: tool({
-    description: TOOL_DESCRIPTIONS.ys_craft_return_to_phase,
-    args: {
-      expected_revision: tool.schema.number().int().nonnegative(),
-      reason: tool.schema.string().min(1),
-      target_phase: tool.schema.string().min(1),
-      workflow_id: tool.schema.string().min(1),
-    },
-    async execute() {
-      return unavailable("ys_craft_return_to_phase");
-    },
-  }),
-  ys_craft_complete: tool({
-    description: TOOL_DESCRIPTIONS.ys_craft_complete,
-    args: {
-      expected_revision: tool.schema.number().int().nonnegative(),
-      workflow_id: tool.schema.string().min(1),
-    },
-    async execute() {
-      return unavailable("ys_craft_complete");
-    },
-  }),
-} satisfies Record<CraftToolId, ToolDefinition>;
-
-const expectedToolIds = CRAFT_TOOL_SURFACE.map((definition) => definition.id).sort();
-const registeredToolIds = Object.keys(craftTools).sort();
-if (
-  expectedToolIds.length !== registeredToolIds.length ||
-  expectedToolIds.some((toolId, index) => toolId !== registeredToolIds[index])
-) {
-  throw new Error("Yuansheng Craft runtime tool registration does not match the frozen surface");
+  return Object.freeze(craftTools);
 }
 
 export const YuanshengCraftPlugin: Plugin = async ({ directory, worktree }) => {
-  await loadOpenCodeCraftController({ directory, worktree });
+  const controller = await loadOpenCodeCraftController({ directory, worktree });
   const writeGuard = createOpenCodeBuilderWriteGuard();
+  const chatParams = writeGuard.hooks["chat.params"];
+  const toolExecuteBefore = writeGuard.hooks["tool.execute.before"];
+  if (chatParams === undefined || toolExecuteBefore === undefined) {
+    throw new TypeError("Yuansheng Craft write guard did not expose its required hooks");
+  }
+  const runtime = new OpenCodeCraftRuntime(
+    createDefaultOpenCodeCraftRuntimeDependencies({
+      binaryGit: createOpenCodeBinaryGitRunner(),
+      builderWrite: Object.freeze({
+        activate: (context, state, artifacts): void => {
+          writeGuard.activateFromToolContext(context, state, artifacts);
+        },
+      }),
+      controller,
+      git: createOpenCodeGitRunner(controller.controllerRoot),
+      localProcess: createOpenCodeLocalProcessRunner(),
+      logSink: createOpenCodeVerificationLogSink(),
+      reloadController: async () => loadOpenCodeCraftController({ directory, worktree }),
+      ssh: async () => createOpenCodeSshVerificationRunner(await resolveSystemSshExecutable()),
+    }),
+  );
   return {
-    ...writeGuard.hooks,
-    tool: craftTools,
+    "chat.params": async (input, output): Promise<void> => {
+      runtime.observeChatAgent(input.sessionID, input.agent);
+      await chatParams(input, output);
+    },
+    event: async ({ event }): Promise<void> => {
+      await runtime.handleEvent(event);
+    },
+    "experimental.compaction.autocontinue": async (input, output): Promise<void> => {
+      if (runtime.compactionPointer(input.sessionID) !== null) {
+        output.enabled = false;
+      }
+    },
+    "experimental.session.compacting": async ({ sessionID }, output): Promise<void> => {
+      const pointer = runtime.compactionPointer(sessionID);
+      if (pointer !== null) {
+        output.context.push(
+          `Yuansheng Craft pointer only; call ys_craft_status or ys_craft_resume explicitly: ${pointer}`,
+        );
+      }
+    },
+    "tool.execute.before": toolExecuteBefore,
+    tool: createOpenCodeCraftTools(runtime),
   };
 };

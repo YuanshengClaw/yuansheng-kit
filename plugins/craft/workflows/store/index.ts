@@ -1,3 +1,4 @@
+export { appendActionJournal, createActionJournal } from "./action-journal";
 export type {
   CommitWorkflowInput,
   InitializeWorkflowInput,
